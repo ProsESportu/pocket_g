@@ -1,8 +1,8 @@
 import * as ort from 'onnxruntime-web/webgpu';
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 import wasmModuleUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
-import { parseLabels, validateWaveform, scoreLogits, type InferenceRequest, type InferenceMessage } from './ecg.ts';
-import { prepareWaveform } from './ecg-preprocessing.ts';
+import { ECG_MODEL_SAMPLES, parseLabels, validateWaveform, scoreLogits, type InferenceRequest, type InferenceMessage } from './ecg.ts';
+import { modelInput } from './ecg-preprocessing.ts';
 import { createEcgSession, runEcgSession } from './ecg-runtime.ts';
 
 // The outer worker keeps inference off the UI thread. One WASM thread avoids requiring COOP/COEP.
@@ -30,7 +30,7 @@ async function createCpuSession(bytes: Uint8Array, options: ort.InferenceSession
 }
 
 async function runSession(current: ort.InferenceSession, prepared: Float32Array) {
-	const input = new tensorRuntime.Tensor('float32', prepared, [1, 1, 5000]);
+	const input = new tensorRuntime.Tensor('float32', prepared, [1, 1, ECG_MODEL_SAMPLES]);
 	try {
 		return await current.run({ ecg: input });
 	} finally {
@@ -72,7 +72,7 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 	try {
 		const { samples, modelUrl, labelsUrl } = event.data;
 		send({ type: 'status', text: 'Checking waveform and preparing ECG…' });
-		const prepared = prepareWaveform(validateWaveform(samples), 'raw');
+		const prepared = modelInput(validateWaveform(samples));
 		if (!labels) {
 			const response = await fetch(labelsUrl);
 			if (!response.ok) throw new Error('Could not load the ECGFounder labels. Please retry.');

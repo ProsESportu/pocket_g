@@ -1,33 +1,34 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { ECG_SAMPLES } from '../src/lib/ecg.ts';
 import { databaseEcgWindow } from '../src/lib/ecg-database.ts';
 import { loadDatabaseEcg } from '../src/lib/ecg-readings.ts';
 
 const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, created_at: new Date(i * 2).toISOString(), ekg: Math.sin(i / 100) }));
 
-test('selects exactly the latest 5,000 ECG values, oldest to newest, without mutation', () => {
-    const readings = rows(6000).reverse();
+test('selects exactly the latest 10 seconds of ECG values, oldest to newest, without mutation', () => {
+    const readings = rows(ECG_SAMPLES + 1000).reverse();
     const original = readings.map((row) => row.id);
     const window = databaseEcgWindow(readings);
-    assert.equal(window.samples.length, 5000);
+    assert.equal(window.samples.length, ECG_SAMPLES);
     assert.equal(window.firstRecordId, 1001);
-    assert.equal(window.lastRecordId, 6000);
+    assert.equal(window.lastRecordId, ECG_SAMPLES + 1000);
     assert.equal(window.samples[0], Math.sin(1000 / 100));
     assert.deepEqual(readings.map((row) => row.id), original);
 });
 
 test('insufficient or invalid ECG values never produce padded or stitched model inputs', () => {
-    for (const count of [0, 100, 4999]) {
+    for (const count of [0, 100, ECG_SAMPLES - 1]) {
         const window = databaseEcgWindow(rows(count));
         assert.equal(window.available, count);
         assert.deepEqual(window.samples, []);
     }
     for (const value of [null, NaN, Infinity, '123', 1e100]) {
-        const readings = rows(5010);
-        readings[5000].ekg = value;
+        const readings = rows(ECG_SAMPLES + 10);
+        readings[ECG_SAMPLES].ekg = value;
         const window = databaseEcgWindow(readings);
-        assert.equal(window.available, 4999);
-        assert.equal(window.rowCount, 5000);
+        assert.equal(window.available, ECG_SAMPLES - 1);
+        assert.equal(window.rowCount, ECG_SAMPLES);
         assert.deepEqual(window.samples, []);
     }
 });
@@ -53,15 +54,15 @@ test('pages past Supabase row limits and keeps the initial snapshot boundary', a
     const { fetcher, urls } = databaseMock(rows(6100), 600);
     const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 6000);
     assert.equal(window.error, '');
-    assert.equal(window.samples.length, 5000);
-    assert.equal(window.firstRecordId, 1001);
+    assert.equal(window.samples.length, ECG_SAMPLES);
+    assert.equal(window.firstRecordId, 6001 - ECG_SAMPLES);
     assert.equal(window.lastRecordId, 6000);
-    assert.equal(urls.length, 9);
+    assert.equal(urls.length, Math.ceil(ECG_SAMPLES / 600));
     assert.equal(urls[0].searchParams.get('id'), 'lte.6000');
     assert.equal(urls[1].searchParams.get('id'), 'lt.5401');
 });
 
-test('counts all available values when the database has fewer than 5,000', async () => {
+test('counts all available values when the database has fewer than 10 seconds of ECG', async () => {
     const { fetcher } = databaseMock(rows(789), 200);
     const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 789);
     assert.equal(window.available, 789);
@@ -77,8 +78,8 @@ test('never falls back to an old ECG recording when the newest rows have no ECG 
     const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 12000);
     assert.deepEqual(window.samples, []);
     assert.equal(window.available, 0);
-    assert.equal(window.rowCount, 5000);
-    assert.equal(window.firstRecordId, 7001);
+    assert.equal(window.rowCount, ECG_SAMPLES);
+    assert.equal(window.firstRecordId, 12001 - ECG_SAMPLES);
     assert.equal(window.lastRecordId, 12000);
 });
 
@@ -87,8 +88,8 @@ test('a missing value in the newest ECG window is not replaced with an older sam
     readings[5500].ekg = null;
     const { fetcher } = databaseMock(readings, 600);
     const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 6000);
-    assert.equal(window.available, 4999);
-    assert.equal(window.firstRecordId, 1001);
+    assert.equal(window.available, ECG_SAMPLES - 1);
+    assert.equal(window.firstRecordId, 6001 - ECG_SAMPLES);
     assert.equal(window.lastRecordId, 6000);
     assert.deepEqual(window.samples, []);
 });

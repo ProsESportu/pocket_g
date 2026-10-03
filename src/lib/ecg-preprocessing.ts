@@ -1,4 +1,4 @@
-import { ECG_SAMPLES, ECG_BASELINE_SAMPLES, type InputMode } from './ecg.ts';
+import { ECG_SAMPLES, ECG_BASELINE_SAMPLES, ECG_MODEL_RATE, ECG_MODEL_SAMPLES, ECG_SAMPLE_RATE, type InputMode } from './ecg.ts';
 
 // scipy.signal.iirnotch(50, 30, 125) and butter(4, [0.67, 40], 'bandpass', fs=125).
 // Steady-state initial conditions from scipy.signal.lfilter_zi. Fixed at ECG_SAMPLE_RATE (125 Hz).
@@ -41,8 +41,9 @@ function filtfilt(signal: Float64Array, coefficients: typeof notch): Float64Arra
 	return filter(forward, coefficients).reverse().slice(edge, edge + signal.length);
 }
 
+/** Filters at the recording rate, removes the baseline and standardizes. Works on any length filtfilt can pad. */
 export function prepareWaveform(signal: Float64Array, mode: InputMode): Float32Array {
-	if (signal.length !== ECG_SAMPLES || signal.some((value) => !Number.isFinite(value))) throw new Error('Invalid ECG waveform.');
+	if (signal.length <= 3 * bandpass.a.length || signal.some((value) => !Number.isFinite(value))) throw new Error('Invalid ECG waveform.');
 	if (mode === 'preprocessed') return Float32Array.from(signal);
 	const filtered = filtfilt(filtfilt(signal, notch), bandpass);
 	// Preserve the approximately 0.4-second baseline window at 125 Hz, with zero padding.
@@ -53,11 +54,43 @@ export function prepareWaveform(signal: Float64Array, mode: InputMode): Float32A
 		window.sort((a, b) => a - b);
 		centered[i] = filtered[i] - window[halfWindow];
 	}
-	const mean = centered.reduce((total, value) => total + value, 0) / centered.length;
-	const variance = centered.reduce((total, value) => total + (value - mean) ** 2, 0) / centered.length;
+	return standardize(centered);
+}
+
+function standardize(values: Float64Array): Float32Array {
+	const mean = values.reduce((total, value) => total + value, 0) / values.length;
+	const variance = values.reduce((total, value) => total + (value - mean) ** 2, 0) / values.length;
 	const std = Math.sqrt(variance);
 	if (!Number.isFinite(std) || std < 1e-12) throw new Error('No usable ECG variation remains after filtering.');
-	const prepared = Float32Array.from(centered, (value) => (value - mean) / (std + 1e-8));
+	const prepared = Float32Array.from(values, (value) => (value - mean) / (std + 1e-8));
 	if (prepared.some((value) => !Number.isFinite(value))) throw new Error('ECG preprocessing produced invalid samples.');
 	return prepared;
+}
+
+const sinc = (x: number) => x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
+
+/** Windowed-sinc (Lanczos) interpolation by a whole factor. Original samples pass through unchanged; edges repeat the end samples. */
+export function upsample(signal: ArrayLike<number>, factor: number, lobes = 4): Float64Array {
+	const output = new Float64Array(signal.length * factor);
+	const last = signal.length - 1;
+	for (let m = 0; m < output.length; m++) {
+		const t = m / factor, base = Math.floor(t);
+		if (t === base) { output[m] = signal[base]; continue; }
+		let sum = 0, weights = 0;
+		for (let k = base - lobes + 1; k <= base + lobes; k++) {
+			const weight = sinc(t - k) * sinc((t - k) / lobes);
+			sum += weight * signal[Math.min(Math.max(k, 0), last)];
+			weights += weight;
+		}
+		output[m] = sum / weights;
+	}
+	return output;
+}
+
+/** ECGFounder input: prepared at the Pi's 125 Hz, upsampled 4x to 500 Hz, then standardized again. */
+export function modelInput(signal: Float64Array): Float32Array {
+	if (signal.length !== ECG_SAMPLES) throw new Error('Invalid ECG waveform.');
+	const input = standardize(upsample(prepareWaveform(signal, 'raw'), ECG_MODEL_RATE / ECG_SAMPLE_RATE));
+	if (input.length !== ECG_MODEL_SAMPLES) throw new Error('Unexpected ECG model input size.');
+	return input;
 }
