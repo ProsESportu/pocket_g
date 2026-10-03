@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { estimatePulse, pulseConfiguration, pulsePeaks, pulseDisplay } from '../src/lib/pulse.ts';
+import { estimatePulse, heartRateAt, pulseConfiguration, pulsePeaks, pulseDisplay } from '../src/lib/pulse.ts';
 
 function waveform(bpm, rate, transform = (value) => value, seconds = 10) {
     return Array.from({ length: Math.ceil(seconds * rate) + 1 }, (_, i) => {
@@ -122,4 +122,24 @@ test('refresh failures preserve the last estimate and its original rate; unavail
     assert.equal(pulseDisplay(current, null, '').stale, false);
     assert.equal(pulseDisplay(pulseConfiguration('250'), previous, '').result.sampleRate, 250);
     assert.equal(pulseDisplay(pulseConfiguration(null), previous, '').result.status, 'unset');
+});
+
+test('beat-to-beat rates skip edge beats, hold to the newest record and gap after missed beats', () => {
+    const steady = estimatePulse(waveform(75, 125), 125);
+    assert.equal(steady.status, 'ready', steady.reason);
+    // 12 beats in 10 s; the two within 0.75 s of an edge and the first kept beat give no rate.
+    assert.equal(steady.rates.length, steady.beatCount - 3);
+    assert.ok(steady.rates.every((rate) => Math.abs(rate.bpm - 75) <= 0.5));
+    assert.ok(steady.rates.slice(1).every((rate, i) => rate.fromId === steady.rates[i].toId + 1));
+    assert.equal(heartRateAt(steady, steady.firstRecordId), null);
+    assert.ok(Math.abs(heartRateAt(steady, steady.lastRecordId) - 75) <= 2);
+    assert.equal(heartRateAt(steady, steady.lastRecordId + 1), null);
+    assert.deepEqual(estimatePulse(waveform(10, 100, undefined, 5), 100).rates, []);
+    // A missed beat at 4.5 s: 60 BPM holds until the late beat at 5.5 s, then a gap until the next one.
+    const peaks = [0.5, 1.5, 2.5, 3.5, 5.5, 6.5, 7.5, 8.5, 9.5];
+    const missed = estimatePulse(waveform(60, 100, (_, t) => 500 + peaks.reduce((sum, peak) => sum + 100 * Math.exp(-(((t - peak) / 0.06) ** 2)), 0)), 100);
+    assert.equal(missed.status, 'ready', missed.reason);
+    assert.ok(Math.abs(heartRateAt(missed, 501) - 60) <= 0.5);
+    assert.equal(heartRateAt(missed, 601), null);
+    assert.ok(Math.abs(heartRateAt(missed, 701) - 60) <= 0.5);
 });

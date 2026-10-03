@@ -114,7 +114,7 @@
 			<span aria-hidden="true" class="drift -mt-[0.08em] block" style:--drift="-0.3em" style:--fade={0.5}><span class="rise outline-text block" style:--i={2}>Session</span></span>
 			<span class="rise -mt-[0.08em] block text-lime" style:--i={3.5}>Session</span>
 		</h1>
-		<p class="mt-6 max-w-[52ch] text-[16px] leading-relaxed text-muted">{displayed.readings.length ? `Your last ${displayed.readings.length} readings in Warsaw time. Each trace has its own scale, so compare a signal with itself rather than with the others.` : 'Your EKG, EMG and pulse appear here as readings arrive, in Warsaw time.'}</p>
+		<p class="mt-6 max-w-[52ch] text-[16px] leading-relaxed text-muted">{displayed.readings.length ? `Your last 10 seconds of readings, in Warsaw time. Each trace has its own scale, so compare a signal with itself rather than with the others.` : 'Your EKG, EMG and pulse appear here as readings arrive, in Warsaw time.'}</p>
 	</div>
 	<div class="hero-panel relative bg-panel lg:col-span-2 lg:col-start-3">
 		<svg class="edge-line absolute inset-0 hidden h-full w-full lg:block" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="16" y1="0" x2="0" y2="100" stroke="var(--color-lime)" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>
@@ -139,7 +139,7 @@
 	<div class="grid items-start gap-x-8 gap-y-14 lg:grid-cols-12">
 		<section class="min-w-0 lg:col-span-8" aria-labelledby="signals-title">
 			<h2 id="signals-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Your</span> <span class="outline-text">signals</span></h2>
-			<SessionStrip readings={displayed.readings} {notes} {selectedNote} unavailable={!!failure} />
+			<SessionStrip readings={displayed.readings} heartRate={displayed.heartRate} {notes} {selectedNote} unavailable={!!failure} />
 		</section>
 		<div class="min-w-0 lg:col-span-4 lg:row-span-4">
 			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />

@@ -12,6 +12,8 @@ export type PulseResult = {
 	reason: string; bpm: number | null; hz: number | null; sampleRate: number | null;
 	duration: number; beatCount: number; firstRecordId: number | null; lastRecordId: number | null;
 	timing: 'timestamps' | 'sample-rate'; timestampsInvalid: boolean; timingReason: string;
+	// Beat-to-beat heart rate: each beat's rate holds over records fromId–toId, until the next beat.
+	rates: { fromId: number; toId: number; bpm: number }[];
 };
 
 export function validPulseRate(rate: number): boolean {
@@ -26,7 +28,7 @@ export function pulseConfiguration(value: string | null): PulseResult {
 		reason: value === null ? 'Enter the sensor sampling rate to calculate pulse frequency.' : valid ? 'Not enough continuous pulse data.' : 'Sampling rate must be a number from 10 to 1,000 Hz.',
 		bpm: null, hz: null, sampleRate: valid ? sampleRate : null,
 		duration: 0, beatCount: 0, firstRecordId: null, lastRecordId: null,
-		timing: 'timestamps', timestampsInvalid: false, timingReason: ''
+		timing: 'timestamps', timestampsInvalid: false, timingReason: '', rates: []
 	};
 }
 
@@ -45,7 +47,8 @@ function lowerBound(values: number[], value: number): number {
 	return low;
 }
 
-function smooth(values: number[], times: number[], radius: number): number[] {
+/** Centered moving average over `radius` either side, in the same units as `times`. */
+export function smooth(values: number[], times: number[], radius: number): number[] {
 	const prefix = [0];
 	for (const value of values) prefix.push(prefix.at(-1)! + value);
 	let start = 0, end = 0;
@@ -149,7 +152,23 @@ function analyzePulse(segment: PulseReading[], times: number[], result: PulseRes
 		result.reason = 'Pulse intervals are too inconsistent for a stable estimate.';
 		return result;
 	}
-	return { ...result, status: 'ready', reason: '', bpm, hz: 1 / interval };
+	// The one-sided baseline shifts beats within half a baseline window of either edge, so those are left
+	// out and the last kept rate holds until two typical intervals after the last beat. Intervals far from
+	// the median are likely missed or doubled beats, so they leave a gap rather than a misleading rate.
+	const margin = PULSE.baselineSeconds / 2;
+	const kept = peaks.map((peak, i) => ({ id: segment[Math.round(peak)].id, time: positions[i] }))
+		.filter((beat) => beat.time >= times[0] + margin && beat.time <= times.at(-1)! - margin);
+	const holdUntil = positions.at(-1)! + 2 * interval;
+	const lastHeld = segment[times.findLastIndex((time) => time <= holdUntil)].id;
+	const rates = kept.slice(1).flatMap((beat, i) => {
+		const span = beat.time - kept[i].time;
+		return Math.abs(span - interval) > interval * PULSE.maxIntervalMad ? [] : [{ fromId: beat.id, toId: i + 2 < kept.length ? kept[i + 2].id - 1 : lastHeld, bpm: 60 / span }];
+	});
+	return { ...result, status: 'ready', reason: '', bpm, hz: 1 / interval, rates };
+}
+
+export function heartRateAt(pulse: PulseResult, id: number): number | null {
+	return pulse.rates.find((rate) => rate.fromId <= id && id <= rate.toId)?.bpm ?? null;
 }
 
 function captureTime(value: string | undefined): number {
@@ -160,7 +179,7 @@ function captureTime(value: string | undefined): number {
 	return milliseconds + (fraction ? (Number(`0.${fraction}`) * 1000) % 1 : 0);
 }
 
-export function timestampPulseWindow(readings: PulseReading[]) {
+export function timestampPulseWindow(readings: PulseReading[], seconds: number = PULSE.windowSeconds) {
 	const ordered = [...readings].sort((a, b) => b.id - a.id);
 	const segment: PulseReading[] = [], times: number[] = [];
 	let invalid = '', complete = false;
@@ -169,9 +188,9 @@ export function timestampPulseWindow(readings: PulseReading[]) {
 		const time = captureTime(row.created_at);
 		if (!Number.isFinite(time)) { invalid = 'Pulse capture timestamps are missing or invalid.'; break; }
 		if (times.length && time >= times.at(-1)!) { invalid = 'Pulse capture timestamps repeat or run backwards.'; break; }
-		if (times.length && times[0] - time > PULSE.windowSeconds * 1000) { complete = true; break; }
+		if (times.length && times[0] - time > seconds * 1000) { complete = true; break; }
 		segment.push(row); times.push(time);
-		if (times[0] - time >= PULSE.windowSeconds * 1000) { complete = true; break; }
+		if (times[0] - time >= seconds * 1000) { complete = true; break; }
 	}
 	segment.reverse(); times.reverse();
 	if (times.length > 1) {
@@ -184,8 +203,8 @@ export function timestampPulseWindow(readings: PulseReading[]) {
 	return { segment, times: times.map((time) => (time - origin) / 1000), invalid, complete: complete || !!invalid };
 }
 
-export function estimatePulseWithTiming(readings: PulseReading[], configuration: PulseResult): PulseResult {
-	const window = timestampPulseWindow(readings);
+export function estimatePulseWithTiming(readings: PulseReading[], configuration: PulseResult, seconds: number = PULSE.windowSeconds): PulseResult {
+	const window = timestampPulseWindow(readings, seconds);
 	if (window.invalid) {
 		const fallback = configuration.sampleRate === null ? { ...configuration } : estimatePulse(readings, configuration.sampleRate);
 		return { ...fallback, timing: 'sample-rate', timestampsInvalid: true, timingReason: window.invalid };

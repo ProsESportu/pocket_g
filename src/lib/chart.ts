@@ -4,22 +4,34 @@ export type SensorField = 'ekg' | 'emg' | 'puls';
 export type Plot = { left: number; right: number; top: number; bottom: number; width: number; height: number };
 export const plot: Plot = { left: 58, right: 332, top: 20, bottom: 178, width: 350, height: 224 };
 
-export function chartData(readings: Reading[], field: SensorField, frame: Plot = plot) {
+// `minSpan` stops a few units of change (such as BPM) filling the whole height; `floor` pins the bottom of
+// the scale for values that start there, such as an activity envelope at zero.
+export type Scale = { minSpan?: number; floor?: number };
+
+// `field` can be a function for derived values.
+export function chartData(readings: Reading[], field: SensorField | ((row: Reading) => number | null), frame: Plot = plot, { minSpan = 0, floor }: Scale = {}) {
+	const read = typeof field === 'function' ? field : (row: Reading) => row[field];
 	const ordered = readings.filter((row) => Number.isFinite(Date.parse(row.created_at)))
 		.slice().sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id);
-	const values = ordered.map((row) => row[field]).filter((value): value is number => value !== null && Number.isFinite(value));
+	const raw = ordered.map((row) => read(row));
+	const values = raw.filter((value): value is number => value !== null && Number.isFinite(value));
 	const min = values.length ? Math.min(...values) : 0;
 	const max = values.length ? Math.max(...values) : 1;
 	const padding = min === max ? Math.max(Math.abs(min) * 0.1, 1) : (max - min) * 0.1;
-	const low = min - padding;
-	const high = max + padding;
+	const pinned = floor !== undefined && min >= floor;
+	const widen = Math.max(minSpan - (max - min) - 2 * padding, 0) / 2;
+	const low = pinned ? floor : min - padding - widen;
+	const high = pinned ? Math.max(max + padding, floor + minSpan) : max + padding + widen;
 	const start = ordered.length ? Date.parse(ordered[0].created_at) : 0;
 	const end = ordered.length ? Date.parse(ordered[ordered.length - 1].created_at) : 0;
-	const points = ordered.map((row) => ({
-		row,
-		x: start === end ? (frame.left + frame.right) / 2 : frame.left + (Date.parse(row.created_at) - start) / (end - start) * (frame.right - frame.left),
-		y: row[field] !== null && Number.isFinite(row[field]) ? frame.bottom - (row[field]! - low) / (high - low) * (frame.bottom - frame.top) : null
-	}));
+	const points = ordered.map((row, index) => {
+		const value = raw[index];
+		return {
+			row,
+			x: start === end ? (frame.left + frame.right) / 2 : frame.left + (Date.parse(row.created_at) - start) / (end - start) * (frame.right - frame.left),
+			y: value !== null && Number.isFinite(value) ? frame.bottom - (value - low) / (high - low) * (frame.bottom - frame.top) : null
+		};
+	});
 	// A capture pause longer than both one second and five typical sample intervals is a gap, not a slope.
 	const times = ordered.map((row) => Date.parse(row.created_at));
 	const spacing = times.slice(1).map((time, index) => time - times[index]).sort((a, b) => a - b);

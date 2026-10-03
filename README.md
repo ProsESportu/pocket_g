@@ -12,18 +12,27 @@ explicit environment configuration.
 
 Run `npm install`, then `npm run dev`.
 
-The app loads the latest 100 rows directly through the Supabase REST API in the browser.
-It displays latest sensor values, an exact accessible row count, a searchable
-table with 20 rows per page, and a refresh button. Search applies to the loaded
-100 rows. Separate EKG, EMG, and pulse charts plot all loaded rows by timestamp,
-with independent scales and gaps for missing values. Hover, tap, or focus a chart
-and use arrow keys to inspect readings. Table search does not filter the charts.
-Timestamps use Europe/Warsaw; sensor values have no assumed units.
+The app loads the last 10 seconds of rows (about 1,250 at 125 Hz) directly
+through the Supabase REST API in the browser. It displays latest sensor values,
+an exact accessible row count, a searchable table with 20 rows per page, and a
+refresh button. Search applies to the loaded rows. Separate EKG, EMG, and pulse
+charts plot all loaded rows by timestamp, with independent scales and gaps for
+missing values. Raw EMG swings across the sensor's range from one sample to the
+next, so its chart shows an activity envelope instead: the deviation from a
+centered 1-second moving mean, as RMS over a centered 0.25-second window, scaled
+from zero. The pulse chart shows beat-to-beat heart rate in BPM rather than the
+raw sensor value. Hover, tap, or focus a chart and use arrow keys (about 0.1 s
+per step, Page keys about 1 s) to inspect readings. Table search does not
+filter the charts. Timestamps use Europe/Warsaw; raw EKG, EMG, and pulse sensor
+values have no assumed units.
 Connection errors and empty results have dedicated states.
 
 Rendering is client-only (`ssr = false` in the root layout). The universal
-page loader fetches readings, ECG windows, and pulse samples using the public
-environment configuration. JavaScript is required. The existing adapter-auto
+page loader fetches 12.5 seconds of readings in pages of up to 1,000 rows (the
+last page sized from the sample spacing so far), then the ECG window, using the
+public environment configuration. The same readings feed the charts, table, and
+pulse estimate; pulse samples are fetched separately only in sampling-rate
+fallback mode. JavaScript is required. The existing adapter-auto
 deployment setup is retained; static hosting needs a separate adapter and SPA
 fallback configuration.
 
@@ -51,10 +60,11 @@ that saved rate. The dedicated Pulse frequency panel below the session strip
 shows Hz prominently alongside BPM, beat count, duration, timing source, and
 record IDs. It follows live/manual refreshes and preserves the last successful
 estimate with a stale label after failures. Raw pulse values remain in the
-session strip and table.
+table.
 
-The browser reads the latest ten seconds through paginated, snapshot-bounded
-read-only requests, capped at 10,001 rows. Calculation uses the newest continuous
+The estimate uses the latest ten seconds of the page's readings. In
+sampling-rate fallback mode, the browser reads them through separate paginated,
+snapshot-bounded read-only requests, capped at 10,001 rows. Calculation uses the newest continuous
 segment in record-ID order, ending at missing/nonfinite values or ID gaps.
 Timestamp mode preserves microseconds and handles irregular sample spacing;
 capture pauses longer than both one second and five median sample intervals
@@ -76,6 +86,16 @@ the median produce an unavailable reason rather than a number. These are initial
 engineering defaults, not calibrated clinical quality criteria. Pulse request
 errors preserve the last successful estimate with a stale label and its original
 sampling rate. An unavailable new recording clears the displayed estimate.
+
+The session strip's pulse lane plots beat-to-beat heart rate from a 12.5-second
+run of the same analysis, so the line reaches the strip's left edge: at each
+record, 60 divided by the interval between the two most recent beats, held
+until the next beat. Beats within 0.75 seconds (half the
+baseline window) of either end of the analysis window are left out because the
+one-sided baseline shifts their timing; the last kept rate holds until two
+median intervals after the newest beat. Intervals more than 30% from the median
+(likely missed or doubled beats) leave a gap. The lane has a minimum 30 BPM scale
+so normal variation isn't magnified. It is empty until the estimate is ready.
 
 ## ECGFounder ONNX analysis
 

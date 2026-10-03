@@ -52,3 +52,26 @@ test('sensor scales are independent and invalid timestamps or nonfinite values a
 	assert.equal(ekg.points[2].y, null);
 	assert.ok(emg.yTicks[0].value > ekg.yTicks[0].value);
 });
+
+test('plots derived values and widens narrow ranges to the minimum span', () => {
+	const rows = [reading(1, 0, 500), reading(2, 1, 600), reading(3, 2, null)];
+	const rates = { 1: 74, 2: 78, 3: null };
+	const chart = chartData(rows, (row) => rates[row.id], plot, { minSpan: 30 });
+	assert.equal(chart.validCount, 2);
+	assert.equal(chart.points[2].y, null);
+	assert.ok(Math.abs(chart.yTicks[0].value - chart.yTicks[2].value - 30) < 1e-9);
+	assert.equal(chart.yTicks[1].value, 76);
+	assert.equal(chartData(rows, 'ekg', plot, { minSpan: 30 }).yTicks[0].value, 610);
+});
+
+test('a floor pins the bottom of the scale and keeps a minimum span above it', () => {
+	const rows = [reading(1, 0, 5), reading(2, 1, 8)];
+	const quiet = chartData(rows, 'ekg', plot, { floor: 0, minSpan: 100 });
+	assert.equal(quiet.yTicks[2].value, 0);
+	assert.equal(quiet.yTicks[0].value, 100);
+	const busy = chartData([...rows, reading(3, 2, 300)], 'ekg', plot, { floor: 0, minSpan: 100 });
+	assert.equal(busy.yTicks[2].value, 0);
+	assert.ok(busy.yTicks[0].value > 300);
+	// Values below the floor fall back to the usual padded scale.
+	assert.ok(chartData([reading(1, 0, -5), reading(2, 1, 8)], 'ekg', plot, { floor: 0 }).yTicks[2].value < -5);
+});
