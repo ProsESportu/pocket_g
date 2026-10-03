@@ -1,9 +1,8 @@
 import type { CoachNote } from './coach.ts';
-import type { EcgResult } from './ecg.ts';
+import { NORMAL_ECG_LABELS, type EcgResult } from './ecg.ts';
 import type { Reading } from './readings.ts';
 
 export const ECG_NOTE_THRESHOLD = 0.80;
-export const NORMAL_ECG_LABELS = new Set(['NORMAL SINUS RHYTHM', 'NORMAL ECG', 'SINUS RHYTHM', 'otherwise normal ecg']);
 
 export function ecgCoachNotes(result: EcgResult | null, readings: Reading[], stale = false): CoachNote[] {
 	if (!result || result.status !== 'ready') return [];

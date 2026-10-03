@@ -1,7 +1,7 @@
 import * as ort from 'onnxruntime-web/webgpu';
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 import wasmModuleUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
-import { ECG_MODEL_SAMPLES, parseLabels, validateWaveform, scoreLogits, type InferenceRequest, type InferenceMessage } from './ecg.ts';
+import { ECG_MODEL_SAMPLES, NORMAL_ECG_LABELS, parseLabels, validateWaveform, scoreLogits, type InferenceRequest, type InferenceMessage } from './ecg.ts';
 import { modelInput } from './ecg-preprocessing.ts';
 import { createEcgSession, runEcgSession } from './ecg-runtime.ts';
 
@@ -114,7 +114,8 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 			modelBytes = undefined;
 			const logits = output.logits;
 			if (logits.type !== 'float32' || logits.dims.join(',') !== '1,150') throw new Error('Unexpected model output shape.');
-			send({ type: 'result', scores: scoreLogits(logits.data as Float32Array, labels), elapsedMs: performance.now() - started });
+			const scores = scoreLogits(logits.data as Float32Array, labels).filter((row) => NORMAL_ECG_LABELS.has(row.label));
+			send({ type: 'result', scores, elapsedMs: performance.now() - started });
 		} finally {
 			if (output) for (const tensor of Object.values(output)) tensor.dispose();
 		}
