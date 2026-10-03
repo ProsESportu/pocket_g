@@ -14,6 +14,7 @@ export type EcgWindow = {
 };
 
 export function databaseEcgWindow(readings: EcgReading[]): EcgWindow {
+	// Select the newest records first, including missing values; only then put the waveform in time order.
 	const ordered = [...readings].sort((a, b) => b.id - a.id).slice(0, ECG_SAMPLES).reverse();
 	const values = ordered.map((row) => row.ekg);
 	const available = values.filter((value) => typeof value === 'number' && Number.isFinite(value) && Number.isFinite(Math.fround(value))).length;

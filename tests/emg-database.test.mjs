@@ -43,6 +43,19 @@ test('EMG stops at null/nonfinite values and never skips a missing newest sample
     }
 });
 
+test('EMG selects the newest window regardless of input order without mutating readings', () => {
+    const input = rows(10000);
+    const original = input.map((row) => row.id);
+    for (const readings of [input, [...input].reverse()]) {
+        const window = databaseEmgWindow(readings);
+        assert.equal(window.firstRecordId, 2501);
+        assert.equal(window.lastRecordId, 10000);
+        assert.equal(window.samples.length, 7500);
+        assert.equal(window.samples.at(-1), input.at(-1).emg);
+    }
+    assert.deepEqual(input.map((row) => row.id), original);
+});
+
 test('EMG detects missing IDs, pauses and breaks crossing page boundaries', async () => {
     const input = rows(5000);
     input[2999].emg = null;

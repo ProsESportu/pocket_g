@@ -11,17 +11,18 @@ export async function loadDatabaseEcg(fetcher: typeof fetch, baseUrl: string, ap
 			const url = new URL('/rest/v1/ekgemgpuls', baseUrl);
 			url.search = new URLSearchParams({
 				select: 'id,created_at,ekg', order: 'id.desc',
-				ekg: 'not.is.null',
 				limit: String(Math.min(1000, ECG_SAMPLES - rows.length)),
 				id: beforeId === undefined ? `lte.${throughId}` : `lt.${beforeId}`
 			}).toString();
 			const response = await fetcher(url, { headers: { apikey: apiKey }, signal });
 			if (!response.ok) throw new Error(`Could not load ECG samples (HTTP ${response.status}). Refresh to retry.`);
+			const pageSize = Math.min(1000, ECG_SAMPLES - rows.length);
 			const page: EcgReading[] = await response.json();
+			if (!Array.isArray(page) || page.length > pageSize) throw new Error('The database returned an invalid ECG sample page.');
 			if (!page.length) break;
 			let previousId = beforeId ?? throughId + 1;
 			for (const row of page) {
-				if (!Number.isSafeInteger(row.id) || row.id >= previousId) throw new Error('The database returned an invalid ECG sample order. Refresh to retry.');
+				if (!row || !Number.isSafeInteger(row.id) || row.id >= previousId) throw new Error('The database returned an invalid ECG sample order. Refresh to retry.');
 				previousId = row.id;
 			}
 			rows.push(...page);

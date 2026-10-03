@@ -76,6 +76,26 @@ test('keeps null samples as continuity breaks and reports insufficient/empty dat
     assert.match((await load(databaseMock(rows(400)).fetcher, 400)).reason, /5 seconds/);
 });
 
+test('pulse estimates the newest recording rather than an older recording with a different rate', async () => {
+    const readings = rows(4000).map((row) => ({
+        ...row,
+        created_at: new Date(1700000000000 + (row.id - 1) * 10).toISOString(),
+        puls: 500 + 100 * Math.sin(2 * Math.PI * (row.id - 1) / (row.id > 2000 ? 50 : 100))
+    }));
+    const { fetcher } = databaseMock(readings, 200);
+    const result = await load(fetcher, 4000);
+    assert.equal(result.status, 'ready', result.reason);
+    assert.equal(result.firstRecordId, 3000);
+    assert.equal(result.lastRecordId, 4000);
+    assert.ok(Math.abs(result.bpm - 120) < 2);
+
+    readings.at(-1).puls = null;
+    const missing = await load(databaseMock(readings).fetcher, 4000);
+    assert.equal(missing.status, 'unavailable');
+    assert.equal(missing.lastRecordId, null);
+    assert.equal(missing.bpm, null);
+});
+
 test('API/network/timeouts discard partial samples and stay pulse-specific', async () => {
     const { fetcher } = databaseMock(rows(1300), 200);
     let count = 0;
