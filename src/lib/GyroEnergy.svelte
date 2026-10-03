@@ -6,6 +6,9 @@
 		restoreGyroSession, serializeGyroSession, type GyroPivot } from './gyro-energy.ts';
 	import { latestGyroId, loadGyroSnapshot } from './gyro-readings.ts';
 	import { GyroSession, initialGyroSession } from './gyro-session.ts';
+	import EnergySets from './EnergySets.svelte';
+	import RecordingQuality from './RecordingQuality.svelte';
+	import { gyroRecordingQuality } from './recording-quality.ts';
 
 	let { monitoring = true, refreshRequest }: { monitoring?: boolean; refreshRequest: { sequence: number; manual: boolean } } = $props();
 	const uid = $props.id();
@@ -20,6 +23,7 @@
 	let controller: GyroSession | undefined;
 	let seenRequest = -1;
 	let energy = $derived(estimateGyroEnergy(session.readings, settings));
+	let quality = $derived(gyroRecordingQuality(session.readings));
 	let distance = $derived(pivotDistanceCm(settings));
 	let canShowEnergy = $derived(session.hasLoaded && (energy.status === 'ready' || energy.status === 'empty'));
 	const number = (value: number) => new Intl.NumberFormat('en-GB', { maximumSignificantDigits: 5 }).format(value);
@@ -141,6 +145,8 @@
 			<p class="mt-4 text-[14px] text-muted" role="status">{session.resetting ? 'Resetting the local session…' : session.busy ? `Loading gyro readings${session.hasLoaded ? '; showing the last completed snapshot' : ''}…` : !monitoring ? 'Monitoring paused. Use Refresh now to load new gyro readings.' : session.error ? 'Gyro refresh failed. Retrying with live updates.' : session.loadedAt ? `Updated ${time(session.loadedAt)}.` : 'Waiting for gyro readings.'}</p>
 			{#if session.error}<p class="mt-3 flex gap-2 text-[15px] leading-relaxed" role="alert"><TriangleAlert size={18} class="mt-0.5 shrink-0 text-lime" /><span>{session.hasLoaded ? 'Stale snapshot. ' : ''}{session.error}</span></p>{/if}
 		</div>
+		{#if canShowEnergy}<EnergySets sets={energy.sets} />{/if}
+		<RecordingQuality summary={quality} title="Gyro session quality" label="Current gyro session" loadedAt={session.loadedAt} stale={!!session.error && session.hasLoaded} {monitoring} refreshing={session.busy} />
 		<div class="mt-6 border-t border-rule pt-5">
 			<button class="btn btn-line w-full sm:w-auto" type="button" disabled={!mounted || session.resetting} onclick={() => controller?.reset()}><RotateCcw size={17} />Reset energy session</button>
 			<p class="mt-3 text-[13px] leading-relaxed text-muted">Starts counting future readings in this tab. Supabase history is preserved; mass and pivot settings stay selected. Settings and the reset survive reloads in this tab.</p>
