@@ -1,4 +1,33 @@
-# sv
+# Pocket G — Supabase sample
+
+A small SvelteKit 3 + TypeScript viewer for `public.ekgemgpuls` in the
+`hackyeah2026` Supabase project.
+
+## Sample app setup
+
+The local `.env` is configured. For a fresh checkout, copy `.env.example` to
+`.env` and set your Supabase URL and publishable key. Never use a secret or
+service-role key. Variables are declared in `src/env.ts` using SvelteKit 3's
+explicit environment configuration.
+
+Run `npm install`, then `npm run dev`.
+
+The app loads the latest 100 rows through the Supabase REST API on the server.
+It displays latest sensor values, an exact accessible row count, a searchable
+table with 20 rows per page, and a refresh button. Search applies to the loaded
+100 rows. Timestamps use Europe/Warsaw; sensor values have no assumed units.
+Connection errors and empty results have dedicated states.
+
+With user approval, the `allow_public_sample_readings` migration granted SELECT
+to `anon` and added a public read policy on the existing sample table. RLS remains
+enabled. Applied SQL is recorded in `supabase/sample-read-access.sql`; do not
+reapply it to this project.
+
+Validate with `npm run check` and `npm run build`.
+
+---
+
+## Original scaffold instructions
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 

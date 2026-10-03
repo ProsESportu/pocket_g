@@ -1,0 +1,25 @@
+import * as env from '$app/env/public';
+import type { PageServerLoad } from './$types';
+import type { Reading } from '#lib/readings.js';
+
+export const load: PageServerLoad = async ({ fetch, depends }) => {
+	depends('app:readings');
+	const base = { readings: [] as Reading[], total: 0, loadedAt: '', error: '' };
+	if (!env.PUBLIC_SUPABASE_URL || !env.PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+		return { ...base, error: 'Add your Supabase URL and publishable key to .env, then restart the app.' };
+	}
+	try {
+		const url = new URL('/rest/v1/ekgemgpuls', env.PUBLIC_SUPABASE_URL);
+		url.search = new URLSearchParams({ select: 'id,created_at,ekg,emg,puls', order: 'id.desc', limit: '100' }).toString();
+		const response = await fetch(url, {
+			headers: { apikey: env.PUBLIC_SUPABASE_PUBLISHABLE_KEY, Prefer: 'count=exact' },
+			signal: AbortSignal.timeout(10000)
+		});
+		if (!response.ok) return { ...base, error: `Supabase returned HTTP ${response.status}. Check the API key, table access, and SELECT policy.` };
+		const readings: Reading[] = await response.json();
+		const count = response.headers.get('content-range')?.split('/')[1];
+		return { readings, total: count && count !== '*' ? Number(count) : readings.length, loadedAt: new Date().toISOString(), error: '' };
+	} catch {
+		return { ...base, error: 'Could not reach Supabase. Check your connection and project URL, then try again.' };
+	}
+};
