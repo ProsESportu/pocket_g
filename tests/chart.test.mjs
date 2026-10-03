@@ -21,6 +21,15 @@ test('keeps zero and breaks the line at missing values', () => {
 	assert.equal((chart.path.match(/L/g) ?? []).length, 0);
 });
 
+test('breaks the line across capture pauses and reports readings left on their own', () => {
+	const rows = [0, 0.01, 0.02, 0.03, 120, 120.01, 240].map((seconds, index) => ({ id: index + 1, created_at: new Date(Date.UTC(2026, 9, 3, 10, 0, 0) + seconds * 1000).toISOString(), ekg: index, emg: index, puls: index }));
+	const chart = chartData(rows, 'ekg');
+	assert.equal((chart.path.match(/M/g) ?? []).length, 3);
+	assert.equal((chart.path.match(/L/g) ?? []).length, 4);
+	assert.deepEqual(chart.isolated.map((point) => point.row.id), [7]);
+	assert.deepEqual(chartData([reading(1, 0, 0), reading(2, 1, null), reading(3, 2, 10)], 'ekg').isolated.map((point) => point.row.id), [1, 3]);
+});
+
 test('empty, missing, single and constant values produce finite coordinates', () => {
 	for (const rows of [[], [reading(1, 0, null)], [reading(1, 0, 0)], [reading(1, 0, -3), reading(2, 0, -3)]]) {
 		const chart = chartData(rows, 'ekg');
