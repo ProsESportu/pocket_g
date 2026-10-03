@@ -1,4 +1,4 @@
-import { estimatePulseWithTiming, timestampPulseWindow, PULSE, type PulseReading, type PulseResult } from '../pulse.ts';
+import { estimatePulseWithTiming, timestampPulseWindow, PULSE, type PulseReading, type PulseResult } from './pulse.ts';
 
 export async function loadDatabasePulse(fetcher: typeof fetch, baseUrl: string, apiKey: string, throughId: number | undefined, configuration: PulseResult): Promise<PulseResult> {
 	if (throughId === undefined) return estimatePulseWithTiming([], configuration);

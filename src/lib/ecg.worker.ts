@@ -1,10 +1,12 @@
-import * as ort from 'onnxruntime-web/wasm';
-import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url';
-import wasmModuleUrl from 'onnxruntime-web/ort-wasm-simd-threaded.mjs?url';
+import * as ort from 'onnxruntime-web/webgpu';
+import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
+import wasmModuleUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
 import { parseLabels, validateWaveform, scoreLogits, type InferenceRequest, type InferenceMessage } from './ecg.ts';
 import { prepareWaveform } from './ecg-preprocessing.ts';
+import { createEcgSession } from './ecg-runtime.ts';
 
 // The outer worker keeps inference off the UI thread. One WASM thread avoids requiring COOP/COEP.
+// Runtime 1.30's /webgpu entry uses native WebGPU with Asyncify, not the JSEP build.
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.proxy = false;
 ort.env.wasm.wasmPaths = {
@@ -12,6 +14,7 @@ ort.env.wasm.wasmPaths = {
 	mjs: new URL(wasmModuleUrl, self.location.href).href
 };
 let session: ort.InferenceSession | undefined;
+let tensorRuntime = ort;
 let labels: string[] | undefined;
 let running = false;
 const send = (message: InferenceMessage) => self.postMessage(message);
@@ -56,13 +59,28 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 		}
 		if (!session) {
 			const model = await loadModel(modelUrl);
-			send({ type: 'status', text: 'Initializing the model…' });
-			session = await ort.InferenceSession.create(model, { executionProviders: ['wasm'] });
-			if (session.inputNames[0] !== 'ecg' || session.outputNames[0] !== 'logits') throw new Error('Unexpected model input or output names.');
+			const initialized = await createEcgSession(
+				model,
+				(bytes, options) => ort.InferenceSession.create(bytes, options),
+				'gpu' in navigator,
+				(text) => send({ type: 'status', text }),
+				async (bytes, options) => {
+					// Keep WebGL separate: the /all bundle uses incompatible JSEP WASM assets.
+					const webgl = await import('onnxruntime-web/webgl');
+					const initialized = await webgl.InferenceSession.create(bytes, options);
+					tensorRuntime = webgl;
+					return initialized;
+				}
+			);
+			if (initialized.inputNames[0] !== 'ecg' || initialized.outputNames[0] !== 'logits') {
+				await initialized.release();
+				throw new Error('Unexpected model input or output names.');
+			}
+			session = initialized;
 		}
 		send({ type: 'status', text: 'Analyzing the database ECG waveform…' });
 		const started = performance.now();
-		const input = new ort.Tensor('float32', prepared, [1, 1, 5000]);
+		const input = new tensorRuntime.Tensor('float32', prepared, [1, 1, 5000]);
 		let output: ort.InferenceSession.ReturnType | undefined;
 		try {
 			output = await session.run({ ecg: input });

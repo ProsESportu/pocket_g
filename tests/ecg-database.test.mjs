@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { databaseEcgWindow } from '../src/lib/ecg-database.ts';
-import { loadDatabaseEcg } from '../src/lib/server/ecg-readings.ts';
+import { loadDatabaseEcg } from '../src/lib/ecg-readings.ts';
 
 const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, created_at: new Date(i * 2).toISOString(), ekg: Math.sin(i / 100) }));
 
