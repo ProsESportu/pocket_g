@@ -175,7 +175,7 @@
 			</div>
 		</section> -->
 		<div class="min-w-0 lg:col-span-8">
-			<EcgAnalysis window={displayed.ecg} connectionError={failure} monitoring={autoRefresh} {refreshing} {manualRequest} onresult={(result) => { ecgResult = result; }} onstate={(state) => { ecgState = state; }} />
+			<EcgAnalysis window={displayed.ecg} connectionError={failure} onresult={(result) => { ecgResult = result; }} onstate={(state) => { ecgState = state; }} />
 		</div>
 		<div class="min-w-0 lg:col-span-8">
 			<EmgAnalysis throughId={displayed.readings[0]?.id} connectionError={failure} monitoring={autoRefresh} {refreshing} {manualRequest} onresult={(result) => { emgResult = result; }} onstate={(state) => { emgState = state; }} />

@@ -1,5 +1,9 @@
-export const ECG_SAMPLES = 5000;
+// The Pi records at 125 Hz; ECGFounder takes 10 seconds at 500 Hz. The newest 10 seconds of database
+// samples are upsampled 4x in the browser to the model's input size.
 export const ECG_SAMPLE_RATE = 125;
+export const ECG_MODEL_RATE = 500;
+export const ECG_MODEL_SAMPLES = 5000;
+export const ECG_SAMPLES = ECG_MODEL_SAMPLES * ECG_SAMPLE_RATE / ECG_MODEL_RATE;
 export const ECG_BASELINE_SAMPLES = 51;
 export const ECG_LABELS = 150;
 export type InputMode = 'raw' | 'preprocessed';
@@ -22,15 +26,16 @@ export function serializeEcgResult(result: EcgResult): string {
 		firstRecordId: result.window.firstRecordId, lastRecordId: result.window.lastRecordId,
 		startedAt: result.window.startedAt, endedAt: result.window.endedAt,
 		assumedSampleRate: ECG_SAMPLE_RATE, assumedLead: 'I', samples: ECG_SAMPLES,
-		preprocessing: 'raw', inferenceMs: result.elapsedMs, analyzedAt: result.analyzedAt,
+		preprocessing: 'raw', resampling: `Lanczos (a = 4) from ${ECG_SAMPLE_RATE} Hz to ${ECG_MODEL_RATE} Hz`, modelSamples: ECG_MODEL_SAMPLES,
+		inferenceMs: result.elapsedMs, analyzedAt: result.analyzedAt,
 		status: result.status, reason: result.reason, scores: result.scores,
-		validation: 'Unvalidated model outputs requiring clinical context; 125 Hz input differs from the model’s expected 500 Hz input.'
+		validation: `Unvalidated model outputs requiring clinical context; ${ECG_SAMPLE_RATE} Hz recordings are upsampled to the model’s ${ECG_MODEL_RATE} Hz input, which adds no detail above ${ECG_SAMPLE_RATE / 2} Hz.`
 	}, null, 2);
 }
 
 export function validateWaveform(values: unknown): Float64Array {
 	if (!Array.isArray(values) || values.length !== ECG_SAMPLES) {
-		throw new Error('Not enough ECG data. Analysis requires exactly 5,000 samples.');
+		throw new Error(`Not enough ECG data. Analysis requires exactly ${ECG_SAMPLES.toLocaleString('en-GB')} samples (10 seconds).`);
 	}
 	if (values.some((v) => typeof v !== 'number' || !Number.isFinite(v) || !Number.isFinite(Math.fround(v)))) {
 		throw new Error('Every ECG sample must be a finite float32-compatible number.');

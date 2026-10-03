@@ -46,7 +46,7 @@ export class EcgAnalysisController {
 		const unavailable = (reason: string) => this.finish({ ...result, reason, analyzedAt: new Date().toISOString() });
 		if (error) { this.fail(new Error(error)); return; }
 		if (samples.length !== ECG_SAMPLES) {
-			unavailable(`Needs 5,000 finite EKG samples. ${window.available.toLocaleString('en-GB')} so far.`);
+			unavailable(`Needs ${ECG_SAMPLES.toLocaleString('en-GB')} finite EKG samples (10 seconds). ${window.available.toLocaleString('en-GB')} so far.`);
 			return;
 		}
 		try { validateWaveform(samples); }
@@ -62,10 +62,17 @@ export class EcgAnalysisController {
 					analyzedAt: new Date().toISOString() });
 			};
 			this.worker.onerror = () => {
-				if (requestId === this.generation && this.state.busy) this.fail(new Error('The browser could not run the ECG worker. Retrying with a fresh worker.'));
+				if (requestId === this.generation && this.state.busy) this.fail(new Error('The browser could not run the ECG model. Try again in a current browser with WebAssembly support.'));
 			};
 			this.worker.postMessage({ requestId, samples: [...samples], ...this.dependencies.urls() } satisfies InferenceRequest);
 		} catch (cause) { this.fail(cause); }
+	}
+
+	/** Stops a running analysis; the previous result stays. The next run starts a fresh worker. */
+	cancel() {
+		if (!this.state.busy) return;
+		this.dispose();
+		this.update({ busy: false, progress: undefined, status: 'Analysis canceled. You can try again.' });
 	}
 
 	dispose() {

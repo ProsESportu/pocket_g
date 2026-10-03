@@ -38,8 +38,9 @@ separate adapter and SPA fallback configuration.
 
 The page automatically refreshes every five seconds while open, including in a
 background tab. Returning to the tab or resuming monitoring refreshes immediately.
-Pause/Resume controls both refresh and automatic model analysis; active runs may
-finish after pausing. Manual refresh requests one analysis pass even while paused.
+Pause/Resume controls both refresh and automatic EMG analysis; active runs may
+finish after pausing. Manual refresh requests one EMG analysis pass even while
+paused. ECG analysis never runs automatically; it starts only from **Analyze ECG**.
 Browser throttling or suspension can delay the five-second cadence. Failed refreshes
 preserve the last successful charts, cards, table, count, and fetch timestamp.
 
@@ -53,12 +54,15 @@ tests use Node.js's built-in TypeScript stripping (Node.js 22.18+).
 
 ## Continuous monitoring and coach’s notes
 
-ECG and EMG run independently: each has one active analysis and one pending
-snapshot, replaced by the latest fresh window. Unchanged completed windows are
-skipped; manual refresh can explicitly rerun them. Model sessions are reused.
-Failures retry after 5, 10, 20, 40, then at most 60 seconds; success resets backoff.
-Pause prevents new runs and retries. All results stay in browser memory, and
-monitoring ends when the dashboard closes. No notes are written to Supabase.
+ECG runs only when **Analyze ECG** is pressed, on the 10-second window shown at
+that moment; **Cancel** stops a run and keeps the previous result. When newer
+samples arrive, the panel says so until it is analyzed again.
+EMG runs automatically: one active analysis and one pending snapshot, replaced by
+the latest fresh window. Unchanged completed windows are skipped; manual refresh
+can explicitly rerun them. Model sessions are reused. EMG failures retry after
+5, 10, 20, 40, then at most 60 seconds; success resets backoff. Pause prevents
+new EMG runs and retries. All results stay in browser memory and end when the
+dashboard closes. No notes are written to Supabase.
 
 Coach’s notes include every ECG output with an independent sigmoid score ≥ 0.80,
 except exactly `NORMAL SINUS RHYTHM`, `NORMAL ECG`, `SINUS RHYTHM`, and
@@ -67,7 +71,8 @@ on the overall `ABNORMAL ECG` score. ECG findings are sorted by descending score
 then original model index; all 150 scores remain available in the panel and JSON.
 Fragments and comparison statements are shown literally as model outputs requiring
 clinical context; the app does not compare recordings or reconstruct diagnoses.
-These flags are unvalidated at the current 125 Hz input; ECGFounder expects 500 Hz.
+These flags are unvalidated: the 125 Hz recording is upsampled to ECGFounder's
+500 Hz input, which keeps real timing but adds no detail above 62.5 Hz.
 
 Sensor fixes precede model findings, followed by sensor suggestions and positive
 checks. Each model replaces its notes after successful completion. No qualifying
@@ -139,38 +144,44 @@ fallback with one thread, without requiring cross-origin isolation or CUDA.
 Analysis runs in a dedicated
 browser worker. ECG values come from the existing Supabase table, and inference
 and results stay in the browser. The 118 MiB model downloads
-on the first eligible automatic analysis, and the session is reused until failure or navigation.
+on the first **Analyze ECG**, and the session is reused until failure or navigation.
 Failures create a fresh worker for retry.
 
-The browser loads up to 5,000 latest EKG rows (`id,created_at,ekg`) separately from
+The browser loads the 1,250 latest EKG rows (`id,created_at,ekg`; 10 seconds at
+125 Hz) separately from
 the dashboard's 10-second chart/table query. It pages through the existing Data API
 in batches of up to 1,000, using descending IDs and the latest dashboard ID as
 a fixed upper boundary. Missing values stay in this newest window, so ECG never
 falls back to an older recording to fill it. Samples are then passed oldest to
 newest by record ID for waveform analysis, as with pulse and EMG.
 This handles the API's row limit and keeps new inserts from shifting pages.
-Each dashboard refresh updates this window. Eligible fresh windows are analyzed
-automatically; results retain their original record IDs when new data arrives.
+Each dashboard refresh updates this window. Results keep their original record
+IDs when new data arrives.
 
-If there are fewer than 5,000 usable database ECG samples, the panel
+If there are fewer than 1,250 usable database ECG samples, the panel
 shows the available count and does not start inference or download the model.
 Rows with null EKG values stay in the newest database window. Missing or nonfinite
 values block analysis. This is a sample-count window, with no verified continuity
 or sampling rate in the current schema.
-There is no file picker, synthetic demo, padding, resampling, or fabricated data.
+There is no file picker, synthetic demo, or padding; missing samples are never
+filled in.
 Database read errors are displayed separately from insufficient samples.
-ECG acquisition and preprocessing are configured for lead I at 125 Hz (5,000
-samples represent 40 seconds); the current database has no lead/sampling-rate
-metadata to verify this. The model expects 500 Hz input, and the current pipeline
-does not resample the 125 Hz recording to that rate.
+ECG acquisition and preprocessing are configured for lead I at 125 Hz (1,250
+samples represent 10 seconds); the current database has no lead/sampling-rate
+metadata to verify this. The Pi can't record at the model's 500 Hz, so after
+filtering at 125 Hz the window is upsampled 4x in the browser to the 5,000
+samples (10 seconds at 500 Hz) the model expects. Earlier versions passed 5,000
+samples (40 seconds) unresampled, which made the model see time 4x faster.
 
 Raw mode adapts the upstream `util.filter_bandpass` at source revision
 `04edac702b61c91face519774ddcc0cd712fef23`: 50 Hz notch (Q=30), fourth-order
 0.67–40 Hz Butterworth bandpass, forward/backward filtering with SciPy's default
 odd padding, filters designed for 125 Hz, 51-sample zero-padded median baseline
 removal (approximately 0.4 seconds, preserving the upstream window duration), then population
-z-score with epsilon `1e-8`. Calculations use float64 and produce a float32 tensor
-named `ecg` of shape `[1,1,5000]`.
+z-score with epsilon `1e-8`. The 1,250 prepared samples are then upsampled 4x with
+Lanczos (a = 4) windowed-sinc interpolation, keeping every original sample and
+repeating the end samples at the edges, and z-scored again. Calculations use
+float64 and produce a float32 tensor named `ecg` of shape `[1,1,5000]`.
 Output `logits` has shape `[1,150]`; stable independent sigmoids are paired with
 `tasks.txt` in its original order. The UI ranks scores for browsing, while JSON
 exports retain the model label order, include logits and database record IDs,
