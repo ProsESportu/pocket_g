@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { pulseConfiguration } from '../src/lib/pulse.ts';
-import { loadDatabasePulse } from '../src/lib/server/pulse-readings.ts';
+import { loadDatabasePulse } from '../src/lib/pulse-readings.ts';
 
 const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, puls: 500 + 100 * Math.sin(2 * Math.PI * i / 100) }));
 function databaseMock(readings, cap = 1000) {

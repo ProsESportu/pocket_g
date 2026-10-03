@@ -1,5 +1,5 @@
-import { ECG_SAMPLES } from '../ecg.ts';
-import { databaseEcgWindow, type EcgReading, type EcgWindow } from '../ecg-database.ts';
+import { ECG_SAMPLES } from './ecg.ts';
+import { databaseEcgWindow, type EcgReading, type EcgWindow } from './ecg-database.ts';
 
 export async function loadDatabaseEcg(fetcher: typeof fetch, baseUrl: string, apiKey: string, throughId: number | undefined): Promise<EcgWindow> {
 	if (throughId === undefined) return databaseEcgWindow([]);

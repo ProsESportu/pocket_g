@@ -12,7 +12,7 @@ explicit environment configuration.
 
 Run `npm install`, then `npm run dev`.
 
-The app loads the latest 100 rows through the Supabase REST API on the server.
+The app loads the latest 100 rows directly through the Supabase REST API in the browser.
 It displays latest sensor values, an exact accessible row count, a searchable
 table with 20 rows per page, and a refresh button. Search applies to the loaded
 100 rows. Separate EKG, EMG, and pulse charts plot all loaded rows by timestamp,
@@ -20,6 +20,12 @@ with independent scales and gaps for missing values. Hover, tap, or focus a char
 and use arrow keys to inspect readings. Table search does not filter the charts.
 Timestamps use Europe/Warsaw; sensor values have no assumed units.
 Connection errors and empty results have dedicated states.
+
+Rendering is client-only (`ssr = false` in the root layout). The universal
+page loader fetches readings, ECG windows, and pulse samples using the public
+environment configuration. JavaScript is required. The existing adapter-auto
+deployment setup is retained; static hosting needs a separate adapter and SPA
+fallback configuration.
 
 The page automatically refreshes every five seconds while visible. Pause/Resume
 controls automatic refresh; manual refresh remains available. Failed refreshes
@@ -43,7 +49,7 @@ acquisition rate (10–1,000 Hz) and click **Apply**. The fallback rate is saved
 the `pulseSampleRate` URL parameter; valid timestamps always take priority over
 that saved rate. Raw pulse values remain in the chart and table.
 
-The server reads the latest ten seconds through paginated, snapshot-bounded
+The browser reads the latest ten seconds through paginated, snapshot-bounded
 read-only requests, capped at 10,001 rows. Calculation uses the newest continuous
 segment in record-ID order, ending at missing/nonfinite values or ID gaps.
 Timestamp mode preserves microseconds and handles irregular sample spacing;
@@ -70,7 +76,12 @@ sampling rate. An unavailable new recording clears the displayed estimate.
 ## ECGFounder ONNX analysis
 
 The dashboard includes the supplied single-lead ECGFounder FP32 model using
-ONNX Runtime Web 1.30.0 and its WebAssembly backend. Analysis runs in a dedicated
+ONNX Runtime Web 1.30.0, preferring WebGPU acceleration with WebAssembly (CPU)
+for unsupported operators. If WebGPU is unavailable in the worker or GPU session
+initialization fails, analysis uses a CPU-only session. GPU support requires a
+WebGPU-capable browser and adapter on HTTPS or localhost. The bundled Asyncify
+WASM/MJS assets support both backends; no CUDA installation is needed.
+Analysis runs in a dedicated
 browser worker. ECG values come from the existing Supabase table, and inference
 and results stay in the browser. The 118 MiB model downloads
 on the first analysis, and the session is reused until cancellation or navigation.

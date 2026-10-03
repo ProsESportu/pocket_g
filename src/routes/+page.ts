@@ -1,12 +1,12 @@
 import * as env from '$app/env/public';
-import type { PageServerLoad } from './$types';
+import type { PageLoad } from './$types';
 import type { Reading } from '#lib/readings.js';
 import { databaseEcgWindow } from '#lib/ecg-database.ts';
-import { loadDatabaseEcg } from '#lib/server/ecg-readings.ts';
+import { loadDatabaseEcg } from '#lib/ecg-readings.ts';
 import { estimatePulseWithTiming, pulseConfiguration } from '#lib/pulse.ts';
-import { loadDatabasePulse } from '#lib/server/pulse-readings.ts';
+import { loadDatabasePulse } from '#lib/pulse-readings.ts';
 
-export const load: PageServerLoad = async ({ fetch, depends, url: pageUrl }) => {
+export const load: PageLoad = async ({ fetch, depends, url: pageUrl }) => {
 	depends('app:readings');
 	const pulseConfig = pulseConfiguration(pageUrl.searchParams.get('pulseSampleRate'));
 	const base = { readings: [] as Reading[], ecg: databaseEcgWindow([]), pulse: estimatePulseWithTiming([], pulseConfig), total: 0, loadedAt: '', error: '' };
