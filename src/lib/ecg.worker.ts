@@ -3,7 +3,7 @@ import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 import wasmModuleUrl from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
 import { parseLabels, validateWaveform, scoreLogits, type InferenceRequest, type InferenceMessage } from './ecg.ts';
 import { prepareWaveform } from './ecg-preprocessing.ts';
-import { createEcgSession } from './ecg-runtime.ts';
+import { createEcgSession, runEcgSession } from './ecg-runtime.ts';
 
 // The outer worker keeps inference off the UI thread. One WASM thread avoids requiring COOP/COEP.
 // Runtime 1.30's /webgpu entry uses native WebGPU with Asyncify, not the JSEP build.
@@ -15,9 +15,28 @@ ort.env.wasm.wasmPaths = {
 };
 let session: ort.InferenceSession | undefined;
 let tensorRuntime = ort;
+let usingCpu = false;
+let modelBytes: Uint8Array | undefined;
 let labels: string[] | undefined;
 let running = false;
 const send = (message: InferenceMessage) => self.postMessage(message);
+
+async function createCpuSession(bytes: Uint8Array, options: ort.InferenceSession.SessionOptions) {
+	const cpu = await import('./ecg-cpu-runtime.ts');
+	const initialized = await cpu.ort.InferenceSession.create(bytes, options);
+	tensorRuntime = cpu.ort;
+	usingCpu = true;
+	return initialized;
+}
+
+async function runSession(current: ort.InferenceSession, prepared: Float32Array) {
+	const input = new tensorRuntime.Tensor('float32', prepared, [1, 1, 5000]);
+	try {
+		return await current.run({ ecg: input });
+	} finally {
+		input.dispose();
+	}
+}
 
 async function loadModel(url: string): Promise<Uint8Array> {
 	const response = await fetch(url, { cache: 'force-cache' });
@@ -58,19 +77,15 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 			labels = parseLabels(await response.text());
 		}
 		if (!session) {
-			const model = await loadModel(modelUrl);
+			tensorRuntime = ort;
+			usingCpu = false;
+			const model = modelBytes = await loadModel(modelUrl);
 			const initialized = await createEcgSession(
 				model,
 				(bytes, options) => ort.InferenceSession.create(bytes, options),
 				'gpu' in navigator,
 				(text) => send({ type: 'status', text }),
-				async (bytes, options) => {
-					// Keep WebGL separate: the /all bundle uses incompatible JSEP WASM assets.
-					const webgl = await import('onnxruntime-web/webgl');
-					const initialized = await webgl.InferenceSession.create(bytes, options);
-					tensorRuntime = webgl;
-					return initialized;
-				}
+				createCpuSession
 			);
 			if (initialized.inputNames[0] !== 'ecg' || initialized.outputNames[0] !== 'logits') {
 				await initialized.release();
@@ -80,18 +95,31 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 		}
 		send({ type: 'status', text: 'Analyzing the database ECG waveform…' });
 		const started = performance.now();
-		const input = new tensorRuntime.Tensor('float32', prepared, [1, 1, 5000]);
 		let output: ort.InferenceSession.ReturnType | undefined;
 		try {
-			output = await session.run({ ecg: input });
+			const result = await runEcgSession(
+				session,
+				(current) => runSession(current, prepared),
+				async () => {
+					const bytes = modelBytes ?? await loadModel(modelUrl);
+					return createCpuSession(bytes, { executionProviders: ['wasm'] });
+				},
+				!usingCpu,
+				(text) => send({ type: 'status', text })
+			);
+			session = result.session;
+			output = result.output;
+			modelBytes = undefined;
 			const logits = output.logits;
 			if (logits.type !== 'float32' || logits.dims.join(',') !== '1,150') throw new Error('Unexpected model output shape.');
 			send({ type: 'result', scores: scoreLogits(logits.data as Float32Array, labels), elapsedMs: performance.now() - started });
 		} finally {
-			input.dispose();
 			if (output) for (const tensor of Object.values(output)) tensor.dispose();
 		}
 	} catch (error) {
+		await session?.release().catch(() => {});
+		session = undefined;
+		modelBytes = undefined;
 		send({ type: 'error', text: error instanceof Error ? error.message : 'Model inference failed. Please retry.' });
 	} finally { running = false; }
 };

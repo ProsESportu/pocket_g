@@ -77,10 +77,13 @@ sampling rate. An unavailable new recording clears the displayed estimate.
 
 The dashboard includes the supplied single-lead ECGFounder FP32 model using
 ONNX Runtime Web 1.30.0, preferring WebGPU acceleration with WebAssembly (CPU)
-for unsupported operators. If WebGPU is unavailable in the worker or GPU session
-initialization fails, analysis uses a CPU-only session. GPU support requires a
+for unsupported operators. If WebGPU is unavailable in the worker, or GPU session
+initialization or inference fails, analysis retries using a separate CPU-only
+WASM runtime. WebGL is skipped because its convolution implementation does not
+support this model's 1D convolutions. GPU support requires a
 WebGPU-capable browser and adapter on HTTPS or localhost. The bundled Asyncify
-WASM/MJS assets support both backends; no CUDA installation is needed.
+WASM/MJS assets support WebGPU; separate standard WASM/MJS assets support CPU
+fallback with one thread, without requiring cross-origin isolation or CUDA.
 Analysis runs in a dedicated
 browser worker. ECG values come from the existing Supabase table, and inference
 and results stay in the browser. The 118 MiB model downloads
