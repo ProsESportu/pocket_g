@@ -25,7 +25,7 @@ export class EcgAnalysisController {
 	}
 	private finish(result: EcgResult) {
 		this.update({ busy: false, error: '', progress: undefined, result,
-			status: result.status === 'ready' ? 'Analysis complete. All 150 scores are available.' : result.reason });
+			status: result.status === 'ready' ? 'Analysis complete.' : result.reason });
 		this.dependencies.complete(result);
 		this.dependencies.settled?.(true);
 	}

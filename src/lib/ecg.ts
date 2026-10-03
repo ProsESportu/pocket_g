@@ -6,6 +6,8 @@ export const ECG_MODEL_SAMPLES = 5000;
 export const ECG_SAMPLES = ECG_MODEL_SAMPLES * ECG_SAMPLE_RATE / ECG_MODEL_RATE;
 export const ECG_BASELINE_SAMPLES = 51;
 export const ECG_LABELS = 150;
+// Only these labels leave the worker; abnormal findings are never shown.
+export const NORMAL_ECG_LABELS = new Set(['NORMAL SINUS RHYTHM', 'NORMAL ECG', 'SINUS RHYTHM', 'otherwise normal ecg']);
 export type InputMode = 'raw' | 'preprocessed';
 export type EcgScore = { index: number; label: string; logit: number; score: number };
 export type InferenceRequest = { requestId: number; samples: number[]; modelUrl: string; labelsUrl: string };

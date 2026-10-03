@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ecgCoachNotes, NORMAL_ECG_LABELS } from '../src/lib/ecg-coach.ts';
-import { parseLabels } from '../src/lib/ecg.ts';
+import { ecgCoachNotes } from '../src/lib/ecg-coach.ts';
+import { NORMAL_ECG_LABELS, parseLabels } from '../src/lib/ecg.ts';
 
 const labels = parseLabels(readFileSync(new URL('../static/models/ecgfounder/tasks.txt', import.meta.url), 'utf8'));
 const result = (scores) => ({ status: 'ready', scores, window: { firstRecordId: 100, lastRecordId: 200,
