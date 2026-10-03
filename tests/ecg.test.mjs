@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parseLabels, validateWaveform, scoreLogits } from '../src/lib/ecg.ts';
+import { ECG_SAMPLE_RATE, ECG_BASELINE_SAMPLES, parseLabels, validateWaveform, scoreLogits } from '../src/lib/ecg.ts';
 import { prepareWaveform } from '../src/lib/ecg-preprocessing.ts';
 
 const labels = parseLabels(readFileSync(new URL('../static/models/ecgfounder/tasks.txt', import.meta.url), 'utf8'));
@@ -19,6 +19,8 @@ test('rejects missing, nonfinite, flat or multichannel database waveforms', () =
 
 for (const fixture of reference.cases) {
     test(`raw preprocessing agrees with SciPy for ${fixture.name}, including edges`, () => {
+        assert.equal(ECG_SAMPLE_RATE, reference.sample_rate);
+        assert.equal(ECG_BASELINE_SAMPLES, reference.baseline_samples);
         const actual = prepareWaveform(Float64Array.from(fixture.samples), 'raw');
         const maxError = Math.max(...actual.map((value, i) => Math.abs(value - fixture.expected[i])));
         assert.ok(maxError < 3e-5, `Maximum float32 sample error: ${maxError}`);

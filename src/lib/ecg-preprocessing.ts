@@ -1,16 +1,16 @@
-import { ECG_SAMPLES, type InputMode } from './ecg.ts';
+import { ECG_SAMPLES, ECG_BASELINE_SAMPLES, type InputMode } from './ecg.ts';
 
-// scipy.signal.iirnotch(50, 30, 500) and butter(4, [0.67, 40], 'bandpass', fs=500).
-// Steady-state initial conditions from scipy.signal.lfilter_zi. These are fixed at 500 Hz.
+// scipy.signal.iirnotch(50, 30, 125) and butter(4, [0.67, 40], 'bandpass', fs=125).
+// Steady-state initial conditions from scipy.signal.lfilter_zi. Fixed at ECG_SAMPLE_RATE (125 Hz).
 const notch = {
-	b: [0.9896361753628921, -1.6012649682336106, 0.9896361753628921],
-	a: [1, -1.6012649682336106, 0.9792723507257841],
-	zi: [0.010363824637107943, 0.010363824637107943]
+	b: [0.95977356895352, 1.552946256070586, 0.95977356895352],
+	a: [1, 1.552946256070586, 0.9195471379070399],
+	zi: [0.04022643104647938, 0.04022643104647983]
 };
 const bandpass = {
-	b: [0.0021067813406203902, 0, -0.008427125362481561, 0, 0.012640688043722342, 0, -0.008427125362481561, 0, 0.0021067813406203902],
-	a: [1, -6.69982772563499, 19.691253828465822, -33.190544451430235, 35.11756594006398, -23.895107000645453, 10.212953481905869, -2.5068563003602984, 0.27056222781627265],
-	zi: [-0.00210677894419725, -0.0021067949998194524, 0.006320377551238459, 0.006320298012649673, -0.006320305874524994, -0.006320363137312367, 0.002106786699727256, 0.0021067806922388066]
+	b: [0.1947278219707764, 0, -0.7789112878831056, 0, 1.1683669318246583, 0, -0.7789112878831056, 0, 0.1947278219707764],
+	a: [1, -2.8335016506866877, 2.3831115378118417, -0.6503380115808338, 0.7916585699178833, -0.8274906841608182, 0.006403234376578401, 0.09090169822805605, 0.039259491682485645],
+	zi: [-0.19472782197740784, -0.19472782195861826, 0.5841834659086844, 0.584183465912997, -0.584183465916911, -0.5841834659114237, 0.19472782197163954, 0.19472782197103675]
 };
 
 function filter(signal: Float64Array, coefficients: typeof notch): Float64Array {
@@ -45,12 +45,13 @@ export function prepareWaveform(signal: Float64Array, mode: InputMode): Float32A
 	if (signal.length !== ECG_SAMPLES || signal.some((value) => !Number.isFinite(value))) throw new Error('Invalid ECG waveform.');
 	if (mode === 'preprocessed') return Float32Array.from(signal);
 	const filtered = filtfilt(filtfilt(signal, notch), bandpass);
-	// scipy.signal.medfilt with a 201-sample window and zero padding.
+	// Preserve the approximately 0.4-second baseline window at 125 Hz, with zero padding.
+	const halfWindow = (ECG_BASELINE_SAMPLES - 1) / 2;
 	const centered = new Float64Array(signal.length);
 	for (let i = 0; i < signal.length; i++) {
-		const window = Array.from({ length: 201 }, (_, j) => filtered[i + j - 100] ?? 0);
+		const window = Array.from({ length: ECG_BASELINE_SAMPLES }, (_, j) => filtered[i + j - halfWindow] ?? 0);
 		window.sort((a, b) => a - b);
-		centered[i] = filtered[i] - window[100];
+		centered[i] = filtered[i] - window[halfWindow];
 	}
 	const mean = centered.reduce((total, value) => total + value, 0) / centered.length;
 	const variance = centered.reduce((total, value) => total + (value - mean) ** 2, 0) / centered.length;

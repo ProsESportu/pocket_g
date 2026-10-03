@@ -105,13 +105,16 @@ values block analysis. This is a sample-count window, with no verified continuit
 or sampling rate in the current schema.
 There is no file picker, synthetic demo, padding, resampling, or fabricated data.
 Database read errors are displayed separately from insufficient samples.
-The model assumes lead I at 500 Hz (5,000 samples represent 10 seconds at that
-rate); the current database has no lead/sampling-rate metadata to verify this.
+ECG acquisition and preprocessing are configured for lead I at 125 Hz (5,000
+samples represent 40 seconds); the current database has no lead/sampling-rate
+metadata to verify this. The model expects 500 Hz input, and the current pipeline
+does not resample the 125 Hz recording to that rate.
 
-Raw mode follows the upstream `util.filter_bandpass` at source revision
+Raw mode adapts the upstream `util.filter_bandpass` at source revision
 `04edac702b61c91face519774ddcc0cd712fef23`: 50 Hz notch (Q=30), fourth-order
 0.67–40 Hz Butterworth bandpass, forward/backward filtering with SciPy's default
-odd padding, 201-sample zero-padded median baseline removal, then population
+odd padding, filters designed for 125 Hz, 51-sample zero-padded median baseline
+removal (approximately 0.4 seconds, preserving the upstream window duration), then population
 z-score with epsilon `1e-8`. Calculations use float64 and produce a float32 tensor
 named `ecg` of shape `[1,1,5000]`.
 Output `logits` has shape `[1,150]`; stable independent sigmoids are paired with

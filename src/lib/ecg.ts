@@ -1,4 +1,6 @@
 export const ECG_SAMPLES = 5000;
+export const ECG_SAMPLE_RATE = 125;
+export const ECG_BASELINE_SAMPLES = 51;
 export const ECG_LABELS = 150;
 export type InputMode = 'raw' | 'preprocessed';
 export type EcgScore = { index: number; label: string; logit: number; score: number };

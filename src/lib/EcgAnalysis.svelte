@@ -2,7 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import { asset } from '$app/paths';
 	import { Download, TriangleAlert } from '@lucide/svelte';
-	import { ECG_SAMPLES, type EcgScore, type InferenceMessage } from './ecg.ts';
+	import { ECG_SAMPLES, ECG_SAMPLE_RATE, ECG_BASELINE_SAMPLES, type EcgScore, type InferenceMessage } from './ecg.ts';
 	import type { EcgWindow } from './ecg-database.ts';
 
 	let { window, connectionError = '' }: { window: EcgWindow; connectionError?: string } = $props();
@@ -73,7 +73,7 @@
 		}
 	}
 	function downloadResults() {
-		const report = { model: 'ECGFounder single-lead', source: 'public.ekgemgpuls.ekg', firstRecordId: analyzedWindow?.firstRecordId, lastRecordId: analyzedWindow?.lastRecordId, startedAt: analyzedWindow?.startedAt, endedAt: analyzedWindow?.endedAt, assumedSampleRate: 500, assumedLead: 'I', samples: ECG_SAMPLES, preprocessing: 'raw', inferenceMs: elapsedMs, scores };
+		const report = { model: 'ECGFounder single-lead', source: 'public.ekgemgpuls.ekg', firstRecordId: analyzedWindow?.firstRecordId, lastRecordId: analyzedWindow?.lastRecordId, startedAt: analyzedWindow?.startedAt, endedAt: analyzedWindow?.endedAt, assumedSampleRate: ECG_SAMPLE_RATE, assumedLead: 'I', samples: ECG_SAMPLES, preprocessing: 'raw', inferenceMs: elapsedMs, scores };
 		const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
 		const link = document.createElement('a');
 		link.href = url;
@@ -135,11 +135,11 @@
 			{#if !search}<button class="btn btn-line mt-4" onclick={() => showAll = !showAll}>{showAll ? 'Show top 10 scores' : 'Show all 150 scores'}</button>{/if}
 		</div>
 	{/if}
-	<p class="mt-6 max-w-[70ch] text-[14px] leading-relaxed text-muted">The model assumes lead I recorded at 500 Hz. The database doesn’t store lead or sampling-rate metadata. Scores are independent model outputs, not diagnoses or calibrated risk estimates.</p>
+	<p class="mt-6 max-w-[70ch] text-[14px] leading-relaxed text-muted">ECG uses lead I at {ECG_SAMPLE_RATE} Hz ({ECG_SAMPLES / ECG_SAMPLE_RATE} seconds for 5,000 samples). The database doesn’t store lead or sampling-rate metadata. The model expects 500 Hz input; these samples aren’t resampled. Scores are independent model outputs, not diagnoses or calibrated risk estimates.</p>
 	<details class="mt-2 max-w-[70ch] text-[14px] leading-relaxed text-muted">
 		<summary class="label flex min-h-11 items-center text-white">How the ECG is prepared</summary>
 		<p>The latest nonempty database EKG values are read in record order. Analysis requires 5,000 finite values. No samples are padded or fabricated.</p>
-		<p class="mt-2">Raw ECG is filtered with a 50 Hz notch (Q = 30), a fourth-order 0.67–40 Hz Butterworth bandpass, and a 201-sample median baseline removal, then standardized. Sigmoid is applied to each of the 150 outputs.</p>
+		<p class="mt-2">Raw ECG is filtered at {ECG_SAMPLE_RATE} Hz with a 50 Hz notch (Q = 30), a fourth-order 0.67–40 Hz Butterworth bandpass, and a {ECG_BASELINE_SAMPLES}-sample median baseline removal, then standardized. Sigmoid is applied to each of the 150 outputs.</p>
 		<a class="mt-2 inline-flex min-h-11 items-center text-lime underline underline-offset-2" href={asset('models/ecgfounder/LICENSE')} download>ECGFounder MIT license</a>
 	</details>
 </section>
