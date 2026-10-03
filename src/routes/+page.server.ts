@@ -1,10 +1,12 @@
 import * as env from '$app/env/public';
 import type { PageServerLoad } from './$types';
 import type { Reading } from '#lib/readings.js';
+import { databaseEcgWindow } from '#lib/ecg-database.ts';
+import { loadDatabaseEcg } from '#lib/server/ecg-readings.ts';
 
 export const load: PageServerLoad = async ({ fetch, depends }) => {
 	depends('app:readings');
-	const base = { readings: [] as Reading[], total: 0, loadedAt: '', error: '' };
+	const base = { readings: [] as Reading[], ecg: databaseEcgWindow([]), total: 0, loadedAt: '', error: '' };
 	if (!env.PUBLIC_SUPABASE_URL || !env.PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
 		return { ...base, error: 'Add your Supabase URL and publishable key to .env, then restart the app.' };
 	}
@@ -18,7 +20,8 @@ export const load: PageServerLoad = async ({ fetch, depends }) => {
 		if (!response.ok) return { ...base, error: `Supabase returned HTTP ${response.status}. Check the API key, table access, and SELECT policy.` };
 		const readings: Reading[] = await response.json();
 		const count = response.headers.get('content-range')?.split('/')[1];
-		return { readings, total: count && count !== '*' ? Number(count) : readings.length, loadedAt: new Date().toISOString(), error: '' };
+		const ecg = await loadDatabaseEcg(fetch, env.PUBLIC_SUPABASE_URL, env.PUBLIC_SUPABASE_PUBLISHABLE_KEY, readings[0]?.id);
+		return { readings, ecg, total: count && count !== '*' ? Number(count) : readings.length, loadedAt: new Date().toISOString(), error: '' };
 	} catch {
 		return { ...base, error: 'Could not reach Supabase. Check your connection and project URL, then try again.' };
 	}

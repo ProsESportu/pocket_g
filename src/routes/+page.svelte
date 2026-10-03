@@ -1,22 +1,45 @@
 <script lang="ts">
 	import { invalidate } from '$app/navigation';
+	import { onMount, untrack } from 'svelte';
+	import SensorChart from '#lib/SensorChart.svelte';
+	import EcgAnalysis from '#lib/EcgAnalysis.svelte';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
+	let lastSuccess = $state<PageData | null>(untrack(() => data.error ? null : data));
+	let displayed = $derived(data.error ? lastSuccess ?? data : data);
+	let autoRefresh = $state(true);
+	let pageVisible = $state(true);
 	let search = $state('');
 	let refreshing = $state(false);
 	let refreshError = $state('');
 	let page = $state(0);
 	const pageSize = 20;
-	let latest = $derived(data.readings[0]);
-	let filtered = $derived(data.readings.filter((row) => [row.id, row.created_at, row.ekg, row.emg, row.puls].join(' ').toLowerCase().includes(search.toLowerCase())));
+	let latest = $derived(displayed.readings[0]);
+	let filtered = $derived(displayed.readings.filter((row) => [row.id, row.created_at, row.ekg, row.emg, row.puls].join(' ').toLowerCase().includes(search.toLowerCase())));
 	let pages = $derived(Math.max(1, Math.ceil(filtered.length / pageSize)));
 	let currentPage = $derived(Math.min(page, pages - 1));
 	let visible = $derived(filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize));
 	const date = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
+	onMount(() => {
+		const updateVisibility = () => { pageVisible = document.visibilityState === 'visible'; };
+		updateVisibility();
+		document.addEventListener('visibilitychange', updateVisibility);
+		const timer = window.setInterval(() => {
+			if (autoRefresh && pageVisible) void refresh();
+		}, 5000);
+		return () => {
+			window.clearInterval(timer);
+			document.removeEventListener('visibilitychange', updateVisibility);
+		};
+	});
 	async function refresh() {
+		if (refreshing) return;
 		refreshing = true;
 		refreshError = '';
-		try { await invalidate('app:readings'); }
+		try {
+			await invalidate('app:readings');
+			if (!data.error) lastSuccess = data;
+		}
 		catch { refreshError = 'Refresh failed. Please try again.'; }
 		finally { refreshing = false; }
 	}
@@ -35,24 +58,37 @@
 	<main>
 		<div class="intro">
 			<div><p class="eyebrow">YOUR DATA, AT A GLANCE</p><h1>Sensor readings<span>.</span></h1><p class="subtitle">A little window into your Supabase data.</p></div>
-			<button class="refresh" onclick={refresh} disabled={refreshing}><span aria-hidden="true">↻</span> {refreshing ? 'Refreshing…' : 'Refresh data'}</button>
+			<div class="refresh-controls">
+				<button class="refresh" onclick={refresh} disabled={refreshing}><span aria-hidden="true">↻</span> {refreshing ? 'Refreshing…' : 'Refresh data'}</button>
+				<button class="auto-refresh" aria-pressed={autoRefresh} onclick={() => autoRefresh = !autoRefresh}>{autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'}</button>
+				<span class="refresh-status">{!autoRefresh ? 'Auto-refresh paused' : !pageVisible ? 'Waiting until this page is visible' : 'Auto-refresh every 5 seconds'}</span>
+			</div>
 		</div>
-		<div class="connection"><span class:failed={!!data.error} class="status-dot"></span><span>{data.error ? 'Connection needs attention' : 'Connected to Supabase'}</span><span class="source">public.ekgemgpuls</span></div>
-		{#if data.error || refreshError}<div class="error" role="alert">{data.error || refreshError}</div>{/if}
+		<div class="connection"><span class:failed={!!(data.error || refreshError)} class="status-dot"></span><span>{data.error || refreshError ? 'Connection needs attention' : 'Connected to Supabase'}</span><span class="source">public.ekgemgpuls</span></div>
+		{#if data.error || refreshError}<div class="error" role="alert">{data.error || refreshError}{#if lastSuccess} Showing the last successful readings.{/if} {autoRefresh ? 'Automatic refresh will retry.' : 'Refresh manually or resume automatic refresh to retry.'}</div>{/if}
 		<section class="metrics" aria-label="Latest sensor values">
 			{#each [{ label: 'EKG', value: latest?.ekg, symbol: '∿' }, { label: 'EMG', value: latest?.emg, symbol: '⌁' }, { label: 'Pulse', value: latest?.puls, symbol: '♡' }] as metric (metric.label)}
 				<article class="metric"><div class="metric-top"><span>{metric.label}</span><span class="metric-icon" aria-hidden="true">{metric.symbol}</span></div><div class="metric-value">{metric.value ?? '—'}</div><p>Latest recorded value</p></article>
 			{/each}
-			<article class="metric count"><div class="metric-top"><span>Total readings</span><span class="metric-icon" aria-hidden="true">▤</span></div><div class="metric-value">{data.error ? '—' : data.total.toLocaleString('en-GB')}</div><p>Visible through the API</p></article>
+			<article class="metric count"><div class="metric-top"><span>Total readings</span><span class="metric-icon" aria-hidden="true">▤</span></div><div class="metric-value">{displayed.error ? '—' : displayed.total.toLocaleString('en-GB')}</div><p>Visible through the API</p></article>
 		</section>
+		<section class="sensor-trends" aria-labelledby="trends-title">
+			<div class="trends-heading"><h2 id="trends-title">Sensor trends <span class="badge">{displayed.readings.length} readings</span></h2><p>Latest 100 loaded records, oldest to newest. Missing values create gaps.</p></div>
+			<div class="chart-grid">
+				<SensorChart readings={displayed.readings} field="ekg" label="EKG" color="#29815c" />
+				<SensorChart readings={displayed.readings} field="emg" label="EMG" color="#5368ae" />
+				<SensorChart readings={displayed.readings} field="puls" label="Pulse" color="#b96359" />
+			</div>
+		</section>
+		<EcgAnalysis window={data.ecg} connectionError={data.error} />
 		<section class="data-panel" aria-labelledby="readings-title" aria-busy={refreshing}>
-			<div class="panel-heading"><div><h2 id="readings-title">Recent readings <span class="badge">{data.readings.length}</span></h2><p>Latest 100 records, newest first.</p></div><label class="search"><span aria-hidden="true">⌕</span><input aria-label="Search recent readings" placeholder="Search readings…" bind:value={search} oninput={() => page = 0} /></label></div>
+			<div class="panel-heading"><div><h2 id="readings-title">Recent readings <span class="badge">{displayed.readings.length}</span></h2><p>Latest 100 records, newest first.</p></div><label class="search"><span aria-hidden="true">⌕</span><input aria-label="Search recent readings" placeholder="Search readings…" bind:value={search} oninput={() => page = 0} /></label></div>
 			<div class="table-scroll"><table><thead><tr><th scope="col">Record ID</th><th scope="col">Recorded at <span class="timezone">(Warsaw)</span></th><th scope="col">EKG</th><th scope="col">EMG</th><th scope="col">Pulse</th></tr></thead><tbody>
 				{#each visible as row (row.id)}<tr><td class="record">#{row.id}</td><td class="timestamp">{date(row.created_at)}</td><td>{row.ekg ?? '—'}</td><td>{row.emg ?? '—'}</td><td><span class="pulse-value">{row.puls ?? '—'}</span></td></tr>{/each}
 			</tbody></table></div>
 			{#if visible.length === 0}<div class="empty"><span aria-hidden="true">▤</span><h3>{search ? 'No matching readings' : 'No readings to show yet'}</h3><p>{search ? 'Try another record ID or sensor value.' : 'An empty table or a missing SELECT policy can return no rows. Check access in Supabase, then refresh.'}</p></div>{/if}
 			<div class="panel-footer"><span>{filtered.length ? currentPage * pageSize + 1 : 0}–{Math.min((currentPage + 1) * pageSize, filtered.length)} of {filtered.length} loaded readings</span><div class="pagination"><button aria-label="Previous page" disabled={currentPage === 0 || refreshing} onclick={() => page = currentPage - 1}>←</button><span>{currentPage + 1} / {pages}</span><button aria-label="Next page" disabled={currentPage >= pages - 1 || refreshing} onclick={() => page = currentPage + 1}>→</button></div></div>
 		</section>
-		<footer class="footnote"><span>Read-only sample · Powered by Supabase</span><span aria-live="polite">{data.loadedAt ? `Last fetched ${date(data.loadedAt)}` : 'Waiting for connection'}</span></footer>
+		<footer class="footnote"><span>Read-only sample · Powered by Supabase</span><span>{displayed.loadedAt ? `Last fetched ${date(displayed.loadedAt)}` : 'Waiting for connection'}</span></footer>
 	</main>
 </div>

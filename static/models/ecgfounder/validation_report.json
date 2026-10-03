@@ -1,0 +1,84 @@
+{
+  "repository": "https://github.com/PKUDigitalHealth/ECGFounder",
+  "repository_revision": "04edac702b61c91face519774ddcc0cd712fef23",
+  "checkpoint": {
+    "url": "https://huggingface.co/PKUDigitalHealth/ECGFounder/resolve/d9b1793951b2342f5f7e84f1ac03cd37f8a08724/1_lead_ECGFounder.pth",
+    "revision": "d9b1793951b2342f5f7e84f1ac03cd37f8a08724",
+    "size_bytes": 369807481,
+    "sha256": "f863a38897fb49a27fec7e44008ea3c7bdbd29c77fa4a02ecbb8c56df4f37603",
+    "expected_sha256": "f863a38897fb49a27fec7e44008ea3c7bdbd29c77fa4a02ecbb8c56df4f37603",
+    "hash_verified": true
+  },
+  "onnx_file": "1_lead_ECGFounder.onnx",
+  "onnx_sha256": "f6cf5ef61399889d7dddb4ac28556729b4a7e56ec78ff824bcf2e8c7a42f95a7",
+  "size_bytes": 123383747,
+  "opset": 17,
+  "input": {
+    "name": "ecg",
+    "dtype": "float32",
+    "shape": [
+      1,
+      1,
+      5000
+    ]
+  },
+  "output": {
+    "name": "logits",
+    "dtype": "float32",
+    "shape": [
+      1,
+      150
+    ]
+  },
+  "preprocessing_included": false,
+  "sigmoid_included": false,
+  "pytorch": "2.5.1+cpu",
+  "onnx": "1.23.1",
+  "onnxruntime": "1.30.0",
+  "parameter_count": 30807750,
+  "operators": {
+    "Constant": 831,
+    "ConstantOfShape": 71,
+    "Concat": 111,
+    "Reshape": 128,
+    "Slice": 71,
+    "Transpose": 70,
+    "Cast": 164,
+    "Pad": 64,
+    "Conv": 61,
+    "Sigmoid": 100,
+    "Mul": 87,
+    "Shape": 47,
+    "Gather": 40,
+    "Add": 60,
+    "Sub": 100,
+    "Div": 40,
+    "Unsqueeze": 80,
+    "ReduceMean": 21,
+    "Gemm": 41,
+    "Einsum": 20,
+    "MaxPool": 7
+  },
+  "checker": "passed",
+  "strict_checkpoint_load": true,
+  "export_adjustment": "Seven max-pool zero pads expressed as Concat with zeros to avoid unsafe Pad fusion.",
+  "graph_optimization": "ORT_ENABLE_ALL (default)",
+  "validation": [
+    {
+      "case": "zero",
+      "max_abs_logit_error": 3.814697265625e-06,
+      "max_abs_score_error": 8.940696716308594e-08
+    },
+    {
+      "case": "seeded_noise",
+      "max_abs_logit_error": 3.814697265625e-06,
+      "max_abs_score_error": 8.046627044677734e-07
+    },
+    {
+      "case": "periodic_signal",
+      "max_abs_logit_error": 6.67572021484375e-06,
+      "max_abs_score_error": 1.3113021850585938e-06
+    }
+  ],
+  "validation_scope": "Synthetic inputs, CPU runtime; no clinical or browser benchmark."
+}
