@@ -33,6 +33,35 @@ reapply it to this project.
 Validate with `npm test`, `npm run check`, and `npm run build`. The chart-data
 tests use Node.js's built-in TypeScript stripping (Node.js 22.18+).
 
+## Pulse frequency
+
+Set **Sampling rate (Hz)** beside the raw pulse chart to the sensor’s actual
+acquisition rate (10–1,000 Hz), then click **Apply**. No default rate is assumed.
+The applied rate is saved in the `pulseSampleRate` URL parameter. Pulse frequency
+shows estimated BPM and Hz and updates on the existing five-second/manual refresh.
+Raw pulse values remain in the chart and table.
+
+The server reads up to `ceil(10 × rate) + 1` latest rows through paginated,
+snapshot-bounded read-only requests. Calculation uses the newest continuous
+segment in record-ID order, ending at missing/nonfinite values or ID gaps.
+Every consecutive row must represent one uniformly spaced pulse sample;
+`created_at` is not used because the current database contains repeated timestamps.
+Unmarked recording pauses cannot be detected from this schema.
+
+The estimator uses a centered 40 ms moving average, a centered 1.5-second rolling
+median baseline, and positive-going peaks with 20% percentile-range prominence
+and 250 ms minimum separation. Window edges use the available samples. Flat peaks
+use their midpoint; isolated peaks use quadratic interpolation to reduce timing
+quantization at low sampling rates. Frequency is the reciprocal of the median
+beat interval; BPM is 60 times that frequency.
+
+At least five continuous seconds and three peaks are required. Flat signals,
+estimates outside 30–240 BPM, or interval median absolute deviation above 30% of
+the median produce an unavailable reason rather than a number. These are initial
+engineering defaults, not calibrated clinical quality criteria. Pulse request
+errors preserve the last successful estimate with a stale label and its original
+sampling rate. An unavailable new recording clears the displayed estimate.
+
 ## ECGFounder ONNX analysis
 
 The dashboard includes the supplied single-lead ECGFounder FP32 model using

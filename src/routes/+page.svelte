@@ -3,6 +3,7 @@
 	import { onMount, untrack } from 'svelte';
 	import SensorChart from '#lib/SensorChart.svelte';
 	import EcgAnalysis from '#lib/EcgAnalysis.svelte';
+	import PulseFrequency from '#lib/PulseFrequency.svelte';
 	import type { PageData } from './$types';
 	let { data }: { data: PageData } = $props();
 	let lastSuccess = $state<PageData | null>(untrack(() => data.error ? null : data));
@@ -77,7 +78,10 @@
 			<div class="chart-grid">
 				<SensorChart readings={displayed.readings} field="ekg" label="EKG" color="#29815c" />
 				<SensorChart readings={displayed.readings} field="emg" label="EMG" color="#5368ae" />
-				<SensorChart readings={displayed.readings} field="puls" label="Pulse" color="#b96359" />
+				<div class="pulse-column">
+					<SensorChart readings={displayed.readings} field="puls" label="Pulse" color="#b96359" />
+					<PulseFrequency result={data.pulse} refreshError={data.error || refreshError} {refreshing} />
+				</div>
 			</div>
 		</section>
 		<EcgAnalysis window={data.ecg} connectionError={data.error} />
