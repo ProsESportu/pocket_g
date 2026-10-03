@@ -2,20 +2,23 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
+	import { TriangleAlert } from '@lucide/svelte';
 	import { pulseDisplay, validPulseRate, type PulseResult } from './pulse';
 	let { result, refreshError = '', refreshing = false }: { result: PulseResult; refreshError?: string; refreshing?: boolean } = $props();
-	let rateInput = $state<number | undefined>(untrack(() => result.sampleRate ?? undefined));
+	// Resets to the applied rate whenever the server reports a new one; editable in between.
+	let rateInput = $derived<number | undefined>(result.sampleRate ?? undefined);
 	let applying = $state(false);
 	let inputError = $state('');
 	let previous = $state<PulseResult | null>(untrack(() => result.status === 'ready' && !refreshError ? result : null));
 	let display = $derived(pulseDisplay(result, previous, refreshError));
-	let appliedRate = $derived(result.sampleRate);
 	let showRatePicker = $derived(result.timestampsInvalid || (!!display.failure && display.result.timestampsInvalid));
+	// The page banner already reports connection failures, so only pulse-specific errors are repeated here.
+	let ownFailure = $derived(display.failure && display.failure !== refreshError ? display.failure : '');
+	let outage = $derived(!!refreshError && !display.stale);
+	let timing = $derived(display.result.timing === 'timestamps' ? 'capture timestamps' : `a ${display.result.sampleRate ?? 'missing'} Hz sampling rate`);
 	const uid = $props.id();
 
-	$effect(() => {
-		rateInput = appliedRate ?? undefined;
-	});
+	// Keeps the last good estimate across failed refreshes, so it needs history a $derived can't hold.
 	$effect(() => {
 		if (result.status !== 'error' && !refreshError) previous = result.status === 'ready' ? result : null;
 	});
@@ -39,30 +42,37 @@
 	}
 </script>
 
-<article class="pulse-frequency" aria-labelledby={`${uid}-title`} aria-busy={applying || refreshing}>
-	<h3 id={`${uid}-title`}>Pulse frequency <span class="badge">Estimate</span></h3>
-	{#if showRatePicker}
-	<p class="pulse-warning">{result.timingReason || display.result.timingReason} Use the sensor’s sampling rate instead.</p>
-	<form class="pulse-rate-form" onsubmitcapture={applyRate}>
-		<label for={`${uid}-rate`}>Sampling rate (Hz)</label>
-		<div class="pulse-rate-controls">
-			<input id={`${uid}-rate`} name="pulseSampleRate" type="number" min="10" max="1000" step="any" required bind:value={rateInput} aria-describedby={`${uid}-help ${uid}-input-error`} aria-invalid={!!inputError} disabled={applying} />
-			<button type="submit" disabled={applying || refreshing}>{applying ? 'Applying…' : 'Apply'}</button>
-		</div>
-		<p id={`${uid}-input-error`} class="pulse-warning" role="alert">{inputError}</p>
-	</form>
-	{/if}
-	<div class="pulse-result" aria-live="polite" aria-atomic="true">
+<section class="min-w-0" aria-labelledby={`${uid}-title`} aria-busy={applying || refreshing}>
+	<h2 id={`${uid}-title`} class="label text-muted">Estimated heart rate</h2>
+	<div>
 		{#if display.result.status === 'ready'}
-			<div class="pulse-bpm">{Math.round(display.result.bpm!)} <span>BPM</span></div>
-			<p class="pulse-hz">{display.result.hz!.toFixed(2)} Hz</p>
-			<p>{display.result.duration.toFixed(1)} seconds · {display.result.timing === 'timestamps' ? 'created_at timing' : `${display.result.sampleRate} Hz sampling`} · {display.result.beatCount} beats</p>
-			<p>Records #{display.result.firstRecordId}–#{display.result.lastRecordId}</p>
+			<p class="mt-2 flex items-baseline gap-3 leading-none">
+				<span class="text-[clamp(72px,11vw,128px)] [font-weight:850] [font-stretch:112%] tracking-[-0.02em]">{Math.round(display.result.bpm!)}</span>
+				<span class="display text-[22px] text-lime">BPM</span>
+			</p>
+			<p class="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-muted">{display.result.hz!.toFixed(2)} Hz from {display.result.beatCount} beats over {display.result.duration.toFixed(1)} seconds, timed by {timing}. Records {display.result.firstRecordId}–{display.result.lastRecordId}.</p>
+		{:else if outage}
+			<p class="mt-3 max-w-[30ch] text-[20px] leading-snug font-semibold">No heart rate while the connection is down.</p>
 		{:else}
-			<p class="pulse-unavailable">{display.result.reason}</p>
-			{#if display.result.status !== 'unset'}<p>{display.result.duration.toFixed(1)} seconds available · {display.result.timing === 'timestamps' ? 'created_at timing' : `${display.result.sampleRate ?? 'Unset'} Hz sampling`}</p>{/if}
+			<p class="mt-3 max-w-[30ch] text-[20px] leading-snug font-semibold">{display.result.reason}</p>
+			{#if display.result.status !== 'unset'}<p class="mt-3 text-[15px] text-muted">{display.result.duration.toFixed(1)} seconds of pulse data, timed by {timing}.</p>{/if}
 		{/if}
-		{#if display.failure}<p class="pulse-warning">{display.stale ? 'Stale estimate — showing the last successful result. ' : ''}{display.failure}</p>{/if}
 	</div>
-	<p id={`${uid}-help`} class="pulse-help">The estimate uses up to 10 seconds of consecutive samples. {showRatePicker ? 'Use the sensor’s actual sampling rate when capture timestamps are invalid.' : 'Timing comes from the created_at capture timestamps.'}</p>
-</article>
+	<div aria-live="polite">
+		{#if display.stale || ownFailure}
+			<p class="mt-3 flex gap-2 text-[15px] leading-relaxed"><TriangleAlert class="mt-0.5 shrink-0 text-lime" size={18} />{display.stale ? 'Showing the last successful estimate. ' : ''}{ownFailure}</p>
+		{/if}
+	</div>
+	{#if showRatePicker}
+		<form class="mt-4" onsubmitcapture={applyRate}>
+			<p class="mb-3 flex gap-2 text-[15px] leading-relaxed"><TriangleAlert class="mt-0.5 shrink-0 text-lime" size={18} />{result.timingReason || display.result.timingReason} Use the sensor’s sampling rate instead.</p>
+			<label for={`${uid}-rate`} class="label block text-muted">Sampling rate (Hz)</label>
+			<div class="mt-2 flex gap-2">
+				<input id={`${uid}-rate`} class="min-h-11 w-full min-w-0 border border-white/45 bg-night px-3 text-[16px] text-white tabular-nums" name="pulseSampleRate" type="number" min="10" max="1000" step="any" required bind:value={rateInput} aria-describedby={`${uid}-help ${uid}-input-error`} aria-invalid={!!inputError} disabled={applying} />
+				<button class="btn btn-lime" type="submit" disabled={applying || refreshing}>{applying ? 'Applying…' : 'Apply'}</button>
+			</div>
+			<p id={`${uid}-input-error`} class="mt-2 text-[14px] text-lime" role="alert">{inputError}</p>
+		</form>
+	{/if}
+	<p id={`${uid}-help`} class="mt-3 max-w-[48ch] text-[13px] leading-relaxed text-muted">Uses up to 10 seconds of consecutive pulse samples. {showRatePicker ? 'Enter the sensor’s real sampling rate while capture timestamps are invalid.' : 'Timing comes from the capture timestamps.'}</p>
+</section>
