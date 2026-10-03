@@ -9,6 +9,7 @@ type Dependencies = {
 	urls: () => Pick<EmgInferenceRequest, 'modelUrl' | 'metadataUrl' | 'profileUrl'>;
 	change: (state: EmgAnalysisState) => void;
 	complete: (result: EmgResult) => void;
+	settled?: (success: boolean) => void;
 };
 
 /** Owns cancellation and result provenance independently of dashboard refreshes. */
@@ -29,12 +30,14 @@ export class EmgAnalysisController {
 	private finish(result: EmgResult) {
 		this.update({ busy: false, error: '', result, status: result.status === 'ready' ? 'Analysis complete.' : result.reason });
 		this.dependencies.complete(result);
+		this.dependencies.settled?.(true);
 	}
 
 	private fail(error: unknown) {
 		this.worker?.terminate();
 		this.worker = undefined;
 		this.update({ busy: false, status: 'Analysis failed.', error: error instanceof Error ? error.message : 'Could not analyze EMG. Retry analysis.' });
+		this.dependencies.settled?.(false);
 	}
 
 	async analyze(throughId: number | undefined) {

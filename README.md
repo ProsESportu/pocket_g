@@ -12,7 +12,7 @@ explicit environment configuration.
 
 Run `npm install`, then `npm run dev`.
 
-The app loads the latest 100 rows directly through the Supabase REST API in the browser.
+The app loads the latest 100 rows through the Supabase REST API.
 It displays latest sensor values, an exact accessible row count, a searchable
 table with 20 rows per page, and a refresh button. Search applies to the loaded
 100 rows. Separate EKG, EMG, and pulse charts plot all loaded rows by timestamp,
@@ -21,14 +21,17 @@ and use arrow keys to inspect readings. Table search does not filter the charts.
 Timestamps use Europe/Warsaw; sensor values have no assumed units.
 Connection errors and empty results have dedicated states.
 
-Rendering is client-only (`ssr = false` in the root layout). The universal
-page loader fetches readings, ECG windows, and pulse samples using the public
-environment configuration. JavaScript is required. The existing adapter-auto
-deployment setup is retained; static hosting needs a separate adapter and SPA
-fallback configuration.
+The universal page loader fetches readings, ECG windows, and pulse samples
+during initial server rendering and subsequent browser refreshes using the public
+environment configuration. JavaScript is required for monitoring and model
+analysis. The existing adapter-auto deployment setup is retained; static hosting
+needs a separate adapter and SPA fallback configuration.
 
-The page automatically refreshes every five seconds while visible. Pause/Resume
-controls automatic refresh; manual refresh remains available. Failed refreshes
+The page automatically refreshes every five seconds while open, including in a
+background tab. Returning to the tab or resuming monitoring refreshes immediately.
+Pause/Resume controls both refresh and automatic model analysis; active runs may
+finish after pausing. Manual refresh requests one analysis pass even while paused.
+Browser throttling or suspension can delay the five-second cadence. Failed refreshes
 preserve the last successful charts, cards, table, count, and fetch timestamp.
 
 With user approval, the `allow_public_sample_readings` migration granted SELECT
@@ -38,6 +41,31 @@ reapply it to this project.
 
 Validate with `npm test`, `npm run check`, and `npm run build`. The chart-data
 tests use Node.js's built-in TypeScript stripping (Node.js 22.18+).
+
+## Continuous monitoring and coach’s notes
+
+ECG and EMG run independently: each has one active analysis and one pending
+snapshot, replaced by the latest fresh window. Unchanged completed windows are
+skipped; manual refresh can explicitly rerun them. Model sessions are reused.
+Failures retry after 5, 10, 20, 40, then at most 60 seconds; success resets backoff.
+Pause prevents new runs and retries. All results stay in browser memory, and
+monitoring ends when the dashboard closes. No notes are written to Supabase.
+
+Coach’s notes include every ECG output with an independent sigmoid score ≥ 0.80,
+except exactly `NORMAL SINUS RHYTHM`, `NORMAL ECG`, `SINUS RHYTHM`, and
+`otherwise normal ecg`. There is no limit on qualifying labels and no dependence
+on the overall `ABNORMAL ECG` score. ECG findings are sorted by descending score,
+then original model index; all 150 scores remain available in the panel and JSON.
+Fragments and comparison statements are shown literally as model outputs requiring
+clinical context; the app does not compare recordings or reconstruct diagnoses.
+These flags are unvalidated at the current 125 Hz input; ECGFounder expects 500 Hz.
+
+Sensor fixes precede model findings, followed by sensor suggestions and positive
+checks. Each model replaces its notes after successful completion. No qualifying
+finding or successfully determined unavailable input clears its notes. Failures
+and active replacement analysis retain previous findings with a stale label.
+Notes preserve their original record range and Warsaw timestamps and highlight
+only the overlap with the currently visible strip.
 
 ## Pulse frequency
 
@@ -91,22 +119,22 @@ fallback with one thread, without requiring cross-origin isolation or CUDA.
 Analysis runs in a dedicated
 browser worker. ECG values come from the existing Supabase table, and inference
 and results stay in the browser. The 118 MiB model downloads
-on the first analysis, and the session is reused until cancellation or navigation.
-Cancel terminates the worker; retry creates a fresh worker.
+on the first eligible automatic analysis, and the session is reused until failure or navigation.
+Failures create a fresh worker for retry.
 
-The server loads up to 5,000 latest EKG rows (`id,created_at,ekg`) separately from
+The browser loads up to 5,000 latest EKG rows (`id,created_at,ekg`) separately from
 the dashboard's 100-row chart/table query. It pages through the existing Data API
 in batches of up to 1,000, using descending IDs and the latest dashboard ID as
 a fixed upper boundary. Missing values stay in this newest window, so ECG never
 falls back to an older recording to fill it. Samples are then passed oldest to
 newest by record ID for waveform analysis, as with pulse and EMG.
 This handles the API's row limit and keeps new inserts from shifting pages.
-Each dashboard refresh updates this window. Click **Analyze ECG** to run the
-current window; results retain their original record IDs when new data arrives.
+Each dashboard refresh updates this window. Eligible fresh windows are analyzed
+automatically; results retain their original record IDs when new data arrives.
 
 If there are fewer than 5,000 usable database ECG samples, the panel
 shows the available count and does not start inference or download the model.
-Rows with null EKG values are skipped by the database query. Nonfinite returned
+Rows with null EKG values stay in the newest database window. Missing or nonfinite
 values block analysis. This is a sample-count window, with no verified continuity
 or sampling rate in the current schema.
 There is no file picker, synthetic demo, padding, resampling, or fabricated data.
@@ -127,7 +155,8 @@ Output `logits` has shape `[1,150]`; stable independent sigmoids are paired with
 `tasks.txt` in its original order. The UI ranks scores for browsing, while JSON
 exports retain the model label order, include logits and database record IDs,
 and explicitly describe lead/sample rate as assumptions. Scores are uncalibrated
-model outputs; no diagnosis or decision threshold is applied.
+model outputs, not diagnoses. An engineering cutoff of 80% is used for coach notes;
+it is not a validated clinical threshold.
 
 The panel supports top-10/all-label views, label search, and JSON export.
 
@@ -148,7 +177,7 @@ environment with NumPy/SciPy; Python is not required to run the app or tests.
 
 ## Experimental EMG fatigue analysis
 
-Click **Analyze EMG** below the ECG panel to analyze raw EMG from
+The EMG panel automatically analyzes fresh raw EMG from
 `public.ekgemgpuls.emg`. This integration uses the supplied standardized logistic
 regression classifier from `EMG_fatigue_detection`, upstream revision
 `1825550c132de4fca2178a34ea9ce5db375a1de6`. The acquisition rate is configured as
@@ -156,7 +185,7 @@ regression classifier from `EMG_fatigue_detection`, upstream revision
 assumed to contain one uniformly spaced raw EMG sample.
 
 Analysis is an **experimental, retrospective snapshot** of the latest continuous
-recording, up to 7,500 samples (60 seconds). EMG is fetched only when requested,
+recording, up to 7,500 samples (60 seconds). EMG is fetched for each eligible fresh snapshot,
 using the dashboard's latest record ID as a fixed upper boundary. Read-only
 requests page in descending-ID order, at most 1,000 rows per page, with a shared
 30-second timeout. Null samples remain in the query. The newest segment ends at
@@ -171,8 +200,8 @@ are required. Short, flat, or insufficient-repetition recordings report an
 unavailable reason without fatigue scores. The model downloads only after those
 checks pass. Preprocessing and inference run in a dedicated browser worker with
 the app's existing ONNX Runtime Web 1.30.0 CPU WASM runtime and one thread.
-The session is reused; Cancel stops database loading and terminates the worker.
-Retry starts a fresh worker after errors. Results stay in browser memory.
+The session is reused; navigation stops database loading and terminates the worker.
+Automatic retry starts a fresh worker after errors. Results stay in browser memory.
 
 The original model expects features from 20–450 Hz filtered EMG, which cannot be
 reproduced at 125 Hz (Nyquist frequency 62.5 Hz). A separate
@@ -196,9 +225,9 @@ numbering and baseline; a window can contain part of an exercise set.
 
 The panel shows per-repetition scores, first trigger, record range, Warsaw
 timestamps, and JSON export containing every feature, score, model hash,
-preprocessing profile, and experimental status. New readings do not replace a
-completed snapshot automatically. Retries, cancellation, and errors retain the
-previous result. Successful replacement with no trigger or unavailable data
+preprocessing profile, and experimental status. Fresh readings automatically replace a
+completed snapshot only when their analysis finishes. Loading and errors retain the
+previous result with a stale label. Successful replacement with no trigger or unavailable data
 clears its fatigue coach note. Coach notes identify the analyzed range and link
 only the portion overlapping the currently visible signal strip.
 

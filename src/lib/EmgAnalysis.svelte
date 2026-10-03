@@ -1,19 +1,23 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { asset } from '$app/paths';
 	import * as env from '$app/env/public';
 	import { Download } from '@lucide/svelte';
 	import { EMG, serializeEmgResult, type EmgResult } from './emg.ts';
 	import { loadDatabaseEmg } from './emg-readings.ts';
 	import { EmgAnalysisController, initialEmgAnalysisState } from './emg-analysis.ts';
+	import { AnalysisMonitor } from './analysis-monitor.ts';
 
-	let { throughId, connectionError = '', onresult }: {
-		throughId?: number; connectionError?: string; onresult: (result: EmgResult) => void;
+	let { throughId, connectionError = '', monitoring = true, refreshing = false, manualRequest = 0, onresult, onstate = () => {} }: {
+		throughId?: number; connectionError?: string; monitoring?: boolean; refreshing?: boolean; manualRequest?: number;
+		onresult: (result: EmgResult) => void; onstate?: (state: { busy: boolean; error: string }) => void;
 	} = $props();
 	let analysis = $state.raw(initialEmgAnalysisState());
 	let result = $derived(analysis.result);
 	let sourceError = $derived(connectionError || (!env.PUBLIC_SUPABASE_URL || !env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ? 'Configure the Supabase URL and publishable key to analyze EMG.' : ''));
 	let newerData = $derived(result && throughId !== undefined && result.window.lastRecordId !== null && throughId > result.window.lastRecordId);
+	let stale = $derived(!!result && (analysis.busy || !!sourceError || !!analysis.error || !!newerData));
+	const monitor = new AnalysisMonitor<{ throughId?: number }>({ run: (snapshot) => { void controller.analyze(snapshot.throughId); } });
 	const controller = new EmgAnalysisController({
 		load: (id, signal) => loadDatabaseEmg(fetch, env.PUBLIC_SUPABASE_URL, env.PUBLIC_SUPABASE_PUBLISHABLE_KEY, id, signal),
 		worker: () => new Worker(new URL('./emg.worker.ts', import.meta.url), { type: 'module' }),
@@ -22,10 +26,19 @@
 			metadataUrl: new URL(asset('models/emg-fatigue/metadata.json'), location.href).href,
 			profileUrl: new URL(asset('models/emg-fatigue/experimental-125hz.json'), location.href).href
 		}),
-		change: (next) => { analysis = next; },
-		complete: (next) => onresult(next)
+		change: (next) => { analysis = next; onstate(next); },
+		complete: (next) => onresult(next),
+		settled: (success) => monitor.complete(success)
 	});
-	onDestroy(() => controller.dispose());
+	function updateMonitoring() {
+		const snapshot = sourceError || refreshing ? null : { throughId };
+		const key = String(throughId);
+		const enabled = monitoring;
+		const request = manualRequest;
+		untrack(() => monitor.observe({ snapshot, key, enabled, manualRequest: request }));
+	}
+	$effect(updateMonitoring);
+	onDestroy(() => { monitor.dispose(); controller.dispose(); });
 	const time = (value: string) => Number.isFinite(Date.parse(value))
 		? new Intl.DateTimeFormat('en-GB', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value)) : 'Timestamp unavailable';
 
@@ -45,19 +58,14 @@
 		<h2 id="emg-analysis-title" class="display text-[28px] md:text-[32px]"><span class="text-lime">EMG</span> <span class="outline-text">fatigue</span></h2>
 		<span class="label border border-lime px-2 py-1 text-lime">Experimental · 125 Hz</span>
 	</div>
-	<p class="mt-3 text-[15px] leading-relaxed text-muted">Analyze up to 60 continuous seconds of raw EMG. Fatigue scores are unvalidated at this sampling rate.</p>
+	<p class="mt-3 text-[15px] leading-relaxed text-muted">Automatically analyze up to 60 continuous seconds of raw EMG. Fatigue scores are unvalidated at this sampling rate.</p>
 	<p class="mt-2 text-[14px] leading-relaxed text-muted">This is a retrospective snapshot. Each moving window resets repetition numbering and the first-three-repetition baseline. At least 10 seconds and three detected repetitions are required.</p>
 	<div class="mt-5 flex flex-wrap gap-3">
-		{#if analysis.busy}
-			<button class="btn btn-line px-4" onclick={() => controller.cancel()}>Cancel EMG analysis</button>
-		{:else}
-			<button class="btn btn-lime px-4" disabled={!!sourceError || throughId === undefined} onclick={() => controller.analyze(throughId)}>{analysis.error ? 'Retry EMG analysis' : 'Analyze EMG'}</button>
-		{/if}
 		{#if result}
 			<button class="btn btn-line gap-2 px-4" onclick={download}><Download size={17} />Export EMG JSON</button>
 		{/if}
 	</div>
-	<p class="mt-3 text-[14px] text-muted" role="status">{analysis.status || (throughId === undefined ? 'Waiting for database readings.' : 'Ready to load EMG when you analyze.')}</p>
+	<p class="mt-3 text-[14px] text-muted" role="status">{analysis.busy ? analysis.status : !monitoring ? 'Monitoring paused. Active runs may finish.' : analysis.error ? 'Analysis failed. Retrying automatically with backoff.' : analysis.status || 'Waiting for database readings.'}</p>
 	{#if sourceError || analysis.error}<p class="mt-3 border-l-2 border-lime bg-raised px-4 py-3 text-[15px]" role="alert">{sourceError || analysis.error} {result ? 'The previous snapshot is retained below.' : ''}</p>{/if}
 	{#if result}
 		<div class="mt-5 border border-rule bg-panel p-4 md:p-5">
@@ -67,7 +75,8 @@
 				<p class="mt-1 text-[14px] text-muted tabular-nums">Records {result.window.firstRecordId}–{result.window.lastRecordId}</p>
 				<p class="mt-1 text-[13px] text-muted">{time(result.window.startedAt)} – {time(result.window.endedAt)} · Warsaw</p>
 			{/if}
-			{#if newerData}<p class="mt-3 text-[14px] text-lime">Newer readings are available. Analyze again to update this snapshot.</p>{/if}
+			{#if stale}<p class="mt-3 text-[14px] text-lime">Stale snapshot. Showing the previous completed analysis.</p>{/if}
+			{#if newerData}<p class="mt-3 text-[14px] text-lime">Newer readings are available. Monitoring updates this snapshot when active.</p>{/if}
 			{#if result.status === 'unavailable'}
 				<p class="mt-4 text-[15px]">{result.reason}</p>
 			{:else}

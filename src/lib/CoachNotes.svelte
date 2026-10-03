@@ -5,7 +5,7 @@
 	let { notes, readingCount, selected = $bindable(null) }: { notes: CoachNote[]; readingCount: number; selected?: string | null } = $props();
 	const uid = $props.id();
 	const KINDS: { kind: CoachKind; phrase: string }[] = [{ kind: 'fix', phrase: 'to fix' }, { kind: 'try', phrase: 'to try' }, { kind: 'keep', phrase: 'to keep' }];
-	const time = (value: string) => new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(value));
+	const time = (value: string) => Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(value)) : 'Timestamp unavailable';
 	const range = (note: CoachNote) => {
 		if (!note.from) return '';
 		const [from, to] = [time(note.from), note.to ? time(note.to) : ''];
@@ -30,7 +30,7 @@
 
 <section class="min-w-0" aria-labelledby={`${uid}-title`}>
 	<h2 id={`${uid}-title`} class="display text-[28px] md:text-[32px]"><span class="text-lime">Coach’s</span> <span class="outline-text">notes</span></h2>
-	<p class="mt-3 text-[15px] leading-relaxed text-muted">{readingCount ? `Sensor checks over the last ${readingCount} readings, plus any experimental EMG analysis snapshot.` : 'Sensor checks and experimental EMG analysis snapshots.'}</p>
+	<p class="mt-3 text-[15px] leading-relaxed text-muted">{readingCount ? `Sensor checks over the last ${readingCount} readings, plus the latest ECG and experimental EMG findings. Times are in Warsaw.` : 'Sensor checks and the latest ECG and experimental EMG findings. Times are in Warsaw.'}</p>
 	<p class="sr-only" aria-live="polite">{summary}</p>
 	{#if notes.length}
 		<ul class="mt-5 -mx-3 space-y-2" role="list">

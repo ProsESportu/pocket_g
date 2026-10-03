@@ -1,80 +1,58 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { asset } from '$app/paths';
 	import { Download, TriangleAlert } from '@lucide/svelte';
-	import { ECG_SAMPLES, ECG_SAMPLE_RATE, ECG_BASELINE_SAMPLES, type EcgScore, type InferenceMessage } from './ecg.ts';
+	import { ECG_SAMPLES, ECG_SAMPLE_RATE, ECG_BASELINE_SAMPLES, serializeEcgResult, type EcgResult } from './ecg.ts';
 	import type { EcgWindow } from './ecg-database.ts';
+	import { EcgAnalysisController, initialEcgAnalysisState } from './ecg-analysis.ts';
+	import { AnalysisMonitor } from './analysis-monitor.ts';
 
-	let { window, connectionError = '' }: { window: EcgWindow; connectionError?: string } = $props();
-	let busy = $state(false);
-	let status = $state('');
-	let progress = $state<number | undefined>();
-	let error = $state('');
-	let scores = $state.raw<EcgScore[]>([]);
-	let elapsedMs = $state(0);
+	let { window, connectionError = '', monitoring = true, refreshing = false, manualRequest = 0, onresult, onstate = () => {} }: {
+		window: EcgWindow; connectionError?: string; monitoring?: boolean; refreshing?: boolean; manualRequest?: number;
+		onresult: (result: EcgResult) => void; onstate?: (state: { busy: boolean; error: string }) => void;
+	} = $props();
+	let analysis = $state.raw(initialEcgAnalysisState());
+	let result = $derived(analysis.result);
+	let busy = $derived(analysis.busy);
+	let status = $derived(analysis.status);
+	let progress = $derived(analysis.progress);
+	let error = $derived(analysis.error);
+	let scores = $derived(result?.scores ?? []);
+	let elapsedMs = $derived(result?.elapsedMs ?? 0);
+	let analyzedWindow = $derived(result?.window);
 	let search = $state('');
 	let showAll = $state(false);
-	let analyzedWindow = $state.raw<EcgWindow | null>(null);
-	let worker: Worker | undefined;
 	let sourceError = $derived(connectionError || window.error);
 	let ready = $derived(!sourceError && window.samples.length === ECG_SAMPLES);
-	let newerData = $derived(analyzedWindow && (analyzedWindow.firstRecordId !== window.firstRecordId || analyzedWindow.lastRecordId !== window.lastRecordId));
+	let newerData = $derived(!!analyzedWindow && (analyzedWindow.firstRecordId !== window.firstRecordId || analyzedWindow.lastRecordId !== window.lastRecordId || analyzedWindow.available !== window.available || analyzedWindow.rowCount !== window.rowCount));
+	let stale = $derived(!!result && (busy || !!sourceError || !!error || newerData));
 	let ranked = $derived([...scores].sort((a, b) => b.score - a.score));
 	let matches = $derived(ranked.filter((row) => row.label.toLowerCase().includes(search.toLowerCase())));
 	let visible = $derived(showAll || search ? matches : matches.slice(0, 10));
-	onDestroy(() => worker?.terminate());
+	const monitor = new AnalysisMonitor<EcgWindow>({ run: (snapshot) => controller.analyze(snapshot) });
+	const controller = new EcgAnalysisController({
+		worker: () => new Worker(new URL('./ecg.worker.ts', import.meta.url), { type: 'module' }),
+		urls: () => ({
+			modelUrl: new URL(asset('models/ecgfounder/1_lead_ECGFounder.onnx'), location.href).href,
+			labelsUrl: new URL(asset('models/ecgfounder/tasks.txt'), location.href).href
+		}),
+		change: (next) => { analysis = next; onstate(next); },
+		complete: (next) => onresult(next),
+		settled: (success) => monitor.complete(success)
+	});
+	function updateMonitoring() {
+		const snapshot = sourceError || refreshing ? null : window;
+		const key = `${window.firstRecordId}:${window.lastRecordId}:${window.rowCount}:${window.available}`;
+		const enabled = monitoring;
+		const request = manualRequest;
+		untrack(() => monitor.observe({ snapshot, key, enabled, manualRequest: request }));
+	}
+	$effect(updateMonitoring);
+	onDestroy(() => { monitor.dispose(); controller.dispose(); });
 
-	function clearResults() {
-		scores = [];
-		error = '';
-		search = '';
-		showAll = false;
-		progress = undefined;
-		status = '';
-	}
-	function cancel() {
-		worker?.terminate();
-		worker = undefined;
-		busy = false;
-		progress = undefined;
-		status = 'Analysis canceled. You can try again.';
-	}
-	function analyze() {
-		if (busy || !ready) return;
-		clearResults();
-		busy = true;
-		status = 'Preparing database ECG values…';
-		analyzedWindow = { ...window, samples: [] };
-		try {
-			if (!worker) {
-				worker = new Worker(new URL('./ecg.worker.ts', import.meta.url), { type: 'module' });
-				worker.onmessage = (event: MessageEvent<InferenceMessage>) => {
-					const message = event.data;
-					if (message.type === 'status') { status = message.text; progress = message.progress; }
-					else if (message.type === 'result') {
-						scores = message.scores;
-						elapsedMs = message.elapsedMs;
-						busy = false;
-						progress = undefined;
-						status = 'Analysis complete. All 150 scores are available.';
-					} else { error = message.text; busy = false; progress = undefined; status = 'Analysis failed.'; }
-				};
-				worker.onerror = () => {
-					error = 'The browser could not run the ECG model. Try again in a current browser with WebAssembly support.';
-					cancel();
-					status = 'Analysis failed.';
-				};
-			}
-			worker.postMessage({ samples: [...window.samples], modelUrl: new URL(asset('models/ecgfounder/1_lead_ECGFounder.onnx'), location.href).href, labelsUrl: new URL(asset('models/ecgfounder/tasks.txt'), location.href).href });
-		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Could not analyze the database ECG values.';
-			busy = false;
-			status = 'Analysis failed.';
-		}
-	}
 	function downloadResults() {
-		const report = { model: 'ECGFounder single-lead', source: 'public.ekgemgpuls.ekg', firstRecordId: analyzedWindow?.firstRecordId, lastRecordId: analyzedWindow?.lastRecordId, startedAt: analyzedWindow?.startedAt, endedAt: analyzedWindow?.endedAt, assumedSampleRate: ECG_SAMPLE_RATE, assumedLead: 'I', samples: ECG_SAMPLES, preprocessing: 'raw', inferenceMs: elapsedMs, scores };
-		const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
+		if (!result) return;
+		const url = URL.createObjectURL(new Blob([serializeEcgResult(result)], { type: 'application/json' }));
 		const link = document.createElement('a');
 		link.href = url;
 		link.download = 'ecgfounder-results.json';
@@ -89,7 +67,7 @@
 		<h2 id="ecg-title" class="display text-[28px] md:text-[32px]"><span class="text-lime">ECG model</span> <span class="outline-text">check</span></h2>
 		<p class="label text-muted tabular-nums">{window.available.toLocaleString('en-GB')} of 5,000 samples</p>
 	</div>
-	<p class="mt-3 max-w-[62ch] text-[16px] leading-relaxed text-muted">Runs the single-lead ECGFounder model on your latest 5,000 EKG samples. It runs in this browser, so the samples aren’t uploaded anywhere.</p>
+	<p class="mt-3 max-w-[62ch] text-[16px] leading-relaxed text-muted">Automatically runs the single-lead ECGFounder model on your latest 5,000 EKG samples. It runs in this browser, so the samples aren’t uploaded anywhere.</p>
 	{#if sourceError}
 		<p class="mt-5 flex gap-2 text-[16px] leading-relaxed" role="alert"><TriangleAlert class="mt-1 shrink-0 text-lime" size={18} />Could not load database ECG values. {sourceError}</p>
 	{:else if !ready}
@@ -100,16 +78,12 @@
 		</div>
 	{:else}
 		<p class="mt-5 text-[14px] text-muted tabular-nums">Uses records {window.firstRecordId}–{window.lastRecordId}, oldest first.</p>
-		<div class="mt-3 flex flex-wrap items-center gap-3">
-			<button class="btn btn-lime" onclick={analyze} disabled={busy}>{busy ? 'Analyzing…' : 'Analyze ECG'}</button>
-			{#if busy}<button class="btn btn-line" onclick={cancel}>Cancel</button>{/if}
-			<span class="text-[14px] text-muted">The first run downloads a 118 MiB model.</span>
-		</div>
-		<p class="mt-4 text-[15px] leading-relaxed" role="status">{status || 'Ready to analyze.'}{progress !== undefined ? ` ${progress}%` : ''}</p>
+		<p class="mt-3 text-[14px] text-muted">The first run downloads a 118 MiB model.</p>
 	{/if}
+	<p class="mt-4 text-[15px] leading-relaxed" role="status">{busy ? status : !monitoring ? 'Monitoring paused. Active runs may finish.' : error ? 'Analysis failed. Retrying automatically with backoff.' : status || 'Waiting for readings.'}{progress !== undefined ? ` ${progress}%` : ''}</p>
 	{#if progress !== undefined}<progress class="mt-2 h-2 w-full accent-lime" max="100" value={progress} aria-label="Model download progress"></progress>{/if}
 	{#if error}<p class="mt-4 flex gap-2 text-[16px] leading-relaxed" role="alert"><TriangleAlert class="mt-1 shrink-0 text-lime" size={18} />{error}</p>{/if}
-	{#if scores.length && ready}
+	{#if scores.length}
 		<div class="mt-8 border-t border-rule pt-6">
 			<div class="flex flex-wrap items-end justify-between gap-4">
 				<div>
@@ -118,7 +92,8 @@
 				</div>
 				<button class="btn btn-line" onclick={downloadResults}><Download size={18} />Download all scores</button>
 			</div>
-			{#if newerData}<p class="mt-4 text-[15px] leading-relaxed">Newer samples are available. Analyze ECG again to update these scores.</p>{/if}
+			{#if stale}<p class="mt-3 text-[14px] text-lime">Stale snapshot. Showing the previous completed analysis.</p>{/if}
+			{#if newerData}<p class="mt-4 text-[15px] leading-relaxed">Newer samples are available. Monitoring updates these scores when active.</p>{/if}
 			<label class="label mt-6 block max-w-sm text-muted">Find a label <input class="mt-2 block min-h-11 w-full border border-white/45 bg-night px-3 text-[16px] font-normal tracking-normal text-white normal-case placeholder:text-muted" type="search" placeholder="Search 150 labels" bind:value={search} /></label>
 			<ol class="mt-4">
 				{#each visible as row (row.index)}
@@ -135,10 +110,10 @@
 			{#if !search}<button class="btn btn-line mt-4" onclick={() => showAll = !showAll}>{showAll ? 'Show top 10 scores' : 'Show all 150 scores'}</button>{/if}
 		</div>
 	{/if}
-	<p class="mt-6 max-w-[70ch] text-[14px] leading-relaxed text-muted">ECG uses lead I at {ECG_SAMPLE_RATE} Hz ({ECG_SAMPLES / ECG_SAMPLE_RATE} seconds for 5,000 samples). The database doesn’t store lead or sampling-rate metadata. The model expects 500 Hz input; these samples aren’t resampled. Scores are independent model outputs, not diagnoses or calibrated risk estimates.</p>
+	<p class="mt-6 max-w-[70ch] text-[14px] leading-relaxed text-muted">ECG uses lead I at {ECG_SAMPLE_RATE} Hz ({ECG_SAMPLES / ECG_SAMPLE_RATE} seconds for 5,000 samples). The database doesn’t store lead or sampling-rate metadata. The model expects 500 Hz input; these samples aren’t resampled. Every non-normal label scoring at least 80% appears in coach’s notes. Scores are independent, unvalidated model outputs requiring clinical context, not diagnoses or calibrated risk estimates.</p>
 	<details class="mt-2 max-w-[70ch] text-[14px] leading-relaxed text-muted">
 		<summary class="label flex min-h-11 items-center text-white">How the ECG is prepared</summary>
-		<p>The latest nonempty database EKG values are read in record order. Analysis requires 5,000 finite values. No samples are padded or fabricated.</p>
+		<p>The latest database EKG values, including missing samples, are read in record order. Analysis requires 5,000 finite values. No samples are padded or fabricated.</p>
 		<p class="mt-2">Raw ECG is filtered at {ECG_SAMPLE_RATE} Hz with a 50 Hz notch (Q = 30), a fourth-order 0.67–40 Hz Butterworth bandpass, and a {ECG_BASELINE_SAMPLES}-sample median baseline removal, then standardized. Sigmoid is applied to each of the 150 outputs.</p>
 		<a class="mt-2 inline-flex min-h-11 items-center text-lime underline underline-offset-2" href={asset('models/ecgfounder/LICENSE')} download>ECGFounder MIT license</a>
 	</details>

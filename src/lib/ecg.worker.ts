@@ -19,7 +19,7 @@ let usingCpu = false;
 let modelBytes: Uint8Array | undefined;
 let labels: string[] | undefined;
 let running = false;
-const send = (message: InferenceMessage) => self.postMessage(message);
+type WorkerUpdate = InferenceMessage extends infer Message ? Message extends InferenceMessage ? Omit<Message, 'requestId'> : never : never;
 
 async function createCpuSession(bytes: Uint8Array, options: ort.InferenceSession.SessionOptions) {
 	const cpu = await import('./ecg-cpu-runtime.ts');
@@ -38,7 +38,7 @@ async function runSession(current: ort.InferenceSession, prepared: Float32Array)
 	}
 }
 
-async function loadModel(url: string): Promise<Uint8Array> {
+async function loadModel(url: string, send: (message: WorkerUpdate) => void): Promise<Uint8Array> {
 	const response = await fetch(url, { cache: 'force-cache' });
 	if (!response.ok) throw new Error(`Model download failed (HTTP ${response.status}). Please retry.`);
 	const length = Number(response.headers.get('content-length'));
@@ -67,6 +67,8 @@ async function loadModel(url: string): Promise<Uint8Array> {
 self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 	if (running) return;
 	running = true;
+	const { requestId } = event.data;
+	const send = (message: WorkerUpdate) => self.postMessage({ ...message, requestId } satisfies InferenceMessage);
 	try {
 		const { samples, modelUrl, labelsUrl } = event.data;
 		send({ type: 'status', text: 'Checking waveform and preparing ECG…' });
@@ -79,7 +81,7 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 		if (!session) {
 			tensorRuntime = ort;
 			usingCpu = false;
-			const model = modelBytes = await loadModel(modelUrl);
+			const model = modelBytes = await loadModel(modelUrl, send);
 			const initialized = await createEcgSession(
 				model,
 				(bytes, options) => ort.InferenceSession.create(bytes, options),
@@ -101,7 +103,7 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 				session,
 				(current) => runSession(current, prepared),
 				async () => {
-					const bytes = modelBytes ?? await loadModel(modelUrl);
+					const bytes = modelBytes ?? await loadModel(modelUrl, send);
 					return createCpuSession(bytes, { executionProviders: ['wasm'] });
 				},
 				!usingCpu,

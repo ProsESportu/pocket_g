@@ -7,6 +7,8 @@
 	import EcgAnalysis from '#lib/EcgAnalysis.svelte';
 	import EmgAnalysis from '#lib/EmgAnalysis.svelte';
 	import { emgCoachNote } from '#lib/emg-coach.ts';
+	import { ecgCoachNotes } from '#lib/ecg-coach.ts';
+	import type { EcgResult } from '#lib/ecg.ts';
 	import type { EmgResult } from '#lib/emg.ts';
 	import PulseFrequency from '#lib/PulseFrequency.svelte';
 	import { signalChecks } from '#lib/coach.ts';
@@ -22,39 +24,63 @@
 	let page = $state(0);
 	let selectedNote = $state<string | null>(null);
 	let emgResult = $state.raw<EmgResult | null>(null);
+	let ecgResult = $state.raw<EcgResult | null>(null);
+	let emgState = $state.raw({ busy: false, error: '' });
+	let ecgState = $state.raw({ busy: false, error: '' });
+	let emgStale = $derived(emgState.busy || !!emgState.error || (emgResult?.window.lastRecordId != null && displayed.readings[0]?.id !== emgResult.window.lastRecordId));
+	let ecgStale = $derived(ecgState.busy || !!ecgState.error || !!displayed.ecg.error || (!!ecgResult && (ecgResult.window.firstRecordId !== displayed.ecg.firstRecordId || ecgResult.window.lastRecordId !== displayed.ecg.lastRecordId || ecgResult.window.available !== displayed.ecg.available || ecgResult.window.rowCount !== displayed.ecg.rowCount)));
+	let manualRequest = $state(0);
+	let requestedPass = false;
 	const pageSize = 20;
-	let notes = $derived([...signalChecks(displayed.readings, displayed.pulse), ...emgCoachNote(emgResult, displayed.readings)]);
+	let notes = $derived.by(() => {
+		const checks = signalChecks(displayed.readings, displayed.pulse);
+		return [...checks.filter((note) => note.kind === 'fix'),
+			...ecgCoachNotes(ecgResult, displayed.readings, ecgStale || !!failure),
+			...emgCoachNote(emgResult, displayed.readings, emgStale || !!failure),
+			...checks.filter((note) => note.kind === 'try'), ...checks.filter((note) => note.kind === 'keep')];
+	});
 	let filtered = $derived(displayed.readings.filter((row) => [row.id, row.created_at, row.ekg, row.emg, row.puls].join(' ').toLowerCase().includes(search.toLowerCase())));
 	let pages = $derived(Math.max(1, Math.ceil(filtered.length / pageSize)));
 	let currentPage = $derived(Math.min(page, pages - 1));
 	let visible = $derived(filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize));
 	let failure = $derived(data.error || refreshError);
-	let status = $derived(failure ? 'Connection problem' : !autoRefresh ? 'Paused' : !pageVisible ? 'Paused while hidden' : 'Live');
+	let status = $derived(failure ? 'Connection problem' : !autoRefresh ? 'Paused' : !pageVisible ? 'Live in background' : 'Live');
 	const date = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
 	const time = (value: string) => new Intl.DateTimeFormat('en-GB', { timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
 	const cell = (value: number | null) => value === null || !Number.isFinite(value) ? null : new Intl.NumberFormat('en-GB', { maximumFractionDigits: 3 }).format(value);
 	onMount(() => {
-		const updateVisibility = () => { pageVisible = document.visibilityState === 'visible'; };
-		updateVisibility();
+		pageVisible = document.visibilityState === 'visible';
+		const updateVisibility = () => {
+			pageVisible = document.visibilityState === 'visible';
+			if (pageVisible && autoRefresh) void refresh();
+		};
 		document.addEventListener('visibilitychange', updateVisibility);
 		const timer = window.setInterval(() => {
-			if (autoRefresh && pageVisible) void refresh();
+			if (autoRefresh) void refresh();
 		}, 5000);
 		return () => {
 			window.clearInterval(timer);
 			document.removeEventListener('visibilitychange', updateVisibility);
 		};
 	});
-	async function refresh() {
+	function toggleMonitoring() {
+		autoRefresh = !autoRefresh;
+		if (autoRefresh) void refresh();
+	}
+	async function refresh(manual = false) {
+		if (manual) requestedPass = true;
 		if (refreshing) return;
 		refreshing = true;
 		refreshError = '';
 		try {
 			await invalidate('app:readings');
-			if (!data.error) lastSuccess = data;
+			if (!data.error) {
+				lastSuccess = data;
+				if (requestedPass) manualRequest++;
+			}
 		}
 		catch { refreshError = 'Refresh failed.'; }
-		finally { refreshing = false; }
+		finally { requestedPass = false; refreshing = false; }
 	}
 </script>
 
@@ -75,17 +101,17 @@
 			<p class="label mr-1 flex items-center gap-2 text-muted">
 				<svg class="size-2.5 shrink-0" viewBox="0 0 10 10" aria-hidden="true">
 					{#if failure}<path d="M5 0.5 9.8 9.5H0.2Z" fill="var(--color-lime)" />
-					{:else if status === 'Live'}<circle cx="5" cy="5" r="4" fill="var(--color-lime)" />
+					{:else if autoRefresh}<circle cx="5" cy="5" r="4" fill="var(--color-lime)" />
 					{:else}<circle cx="5" cy="5" r="3.5" fill="none" stroke="currentColor" stroke-width="1.5" />{/if}
 				</svg>
 				<span class="text-white max-sm:sr-only">{status}</span>
 				{#if displayed.loadedAt}<span class="hidden tabular-nums sm:inline">Updated {time(displayed.loadedAt)}</span>{/if}
 			</p>
-			<button class="btn btn-line px-3 md:px-4" onclick={() => autoRefresh = !autoRefresh}>
+			<button class="btn btn-line px-3 md:px-4" onclick={toggleMonitoring}>
 				{#if autoRefresh}<Pause size={18} />{:else}<Play size={18} />{/if}
-				<span class="sr-only md:not-sr-only">{autoRefresh ? 'Pause live updates' : 'Resume live updates'}</span>
+				<span class="sr-only md:not-sr-only">{autoRefresh ? 'Pause monitoring' : 'Resume monitoring'}</span>
 			</button>
-			<button class="btn btn-line px-3 md:px-4" onclick={refresh}>
+			<button class="btn btn-line px-3 md:px-4" onclick={() => refresh(true)}>
 				<RefreshCw size={18} />
 				<span class="sr-only md:not-sr-only">Refresh now</span>
 			</button>
@@ -139,10 +165,10 @@
 			</div>
 		</section> -->
 		<div class="min-w-0 lg:col-span-8">
-			<EcgAnalysis window={data.ecg} connectionError={data.error} />
+			<EcgAnalysis window={displayed.ecg} connectionError={failure} monitoring={autoRefresh} {refreshing} {manualRequest} onresult={(result) => { ecgResult = result; }} onstate={(state) => { ecgState = state; }} />
 		</div>
 		<div class="min-w-0 lg:col-span-8">
-			<EmgAnalysis throughId={displayed.readings[0]?.id} connectionError={failure} onresult={(result) => { emgResult = result; }} />
+			<EmgAnalysis throughId={displayed.readings[0]?.id} connectionError={failure} monitoring={autoRefresh} {refreshing} {manualRequest} onresult={(result) => { emgResult = result; }} onstate={(state) => { emgState = state; }} />
 		</div>
 	</div>
 

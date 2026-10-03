@@ -4,11 +4,29 @@ export const ECG_BASELINE_SAMPLES = 51;
 export const ECG_LABELS = 150;
 export type InputMode = 'raw' | 'preprocessed';
 export type EcgScore = { index: number; label: string; logit: number; score: number };
-export type InferenceRequest = { samples: number[]; modelUrl: string; labelsUrl: string };
+export type InferenceRequest = { requestId: number; samples: number[]; modelUrl: string; labelsUrl: string };
 export type InferenceMessage =
-	| { type: 'status'; text: string; progress?: number }
-	| { type: 'result'; scores: EcgScore[]; elapsedMs: number }
-	| { type: 'error'; text: string };
+	| { requestId: number; type: 'status'; text: string; progress?: number }
+	| { requestId: number; type: 'result'; scores: EcgScore[]; elapsedMs: number }
+	| { requestId: number; type: 'error'; text: string };
+
+export type EcgResult = {
+	status: 'ready' | 'unavailable'; reason: string; scores: EcgScore[];
+	window: Omit<import('./ecg-database.ts').EcgWindow, 'samples' | 'error'>;
+	analyzedAt: string; elapsedMs: number;
+};
+
+export function serializeEcgResult(result: EcgResult): string {
+	return JSON.stringify({
+		model: 'ECGFounder single-lead', source: 'public.ekgemgpuls.ekg',
+		firstRecordId: result.window.firstRecordId, lastRecordId: result.window.lastRecordId,
+		startedAt: result.window.startedAt, endedAt: result.window.endedAt,
+		assumedSampleRate: ECG_SAMPLE_RATE, assumedLead: 'I', samples: ECG_SAMPLES,
+		preprocessing: 'raw', inferenceMs: result.elapsedMs, analyzedAt: result.analyzedAt,
+		status: result.status, reason: result.reason, scores: result.scores,
+		validation: 'Unvalidated model outputs requiring clinical context; 125 Hz input differs from the model’s expected 500 Hz input.'
+	}, null, 2);
+}
 
 export function validateWaveform(values: unknown): Float64Array {
 	if (!Array.isArray(values) || values.length !== ECG_SAMPLES) {
