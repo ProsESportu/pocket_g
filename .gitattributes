@@ -1,1 +1,2 @@
 *.onnx filter=lfs diff=lfs merge=lfs -text
+static/models/ecgfounder/1_lead_ECGFounder.onnx filter=lfs diff=lfs merge=lfs -text
