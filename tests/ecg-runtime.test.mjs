@@ -17,6 +17,8 @@ test('worker runtime assets initialize WASM with the native WebGPU entry point',
     assert.equal(typeof runtime.asyncInit, 'function');
 });
 
+const unexpectedWebGl = async () => { throw new Error('WebGL should not be attempted'); };
+
 test('prefers WebGPU with WASM operator fallback and preserves model bytes', async () => {
     const model = new Uint8Array([1, 2, 3]);
     const session = {};
@@ -25,36 +27,74 @@ test('prefers WebGPU with WASM operator fallback and preserves model bytes', asy
         assert.equal(bytes, model);
         calls.push(options.executionProviders);
         return session;
-    }, true, () => {});
+    }, true, () => {}, unexpectedWebGl);
     assert.equal(actual, session);
     assert.deepEqual(calls, [['webgpu', 'wasm']]);
 });
 
-test('uses CPU directly when WebGPU is unavailable in the worker', async () => {
-    const calls = [];
+test('uses WebGL when WebGPU is unavailable, without initializing WASM', async () => {
+    const model = new Uint8Array([1]);
+    const session = {};
     const statuses = [];
-    await createEcgSession(new Uint8Array(), async (_, options) => {
-        calls.push(options.executionProviders);
-        return {};
-    }, false, (text) => statuses.push(text));
-    assert.deepEqual(calls, [['wasm']]);
-    assert.match(statuses[0], /WebGPU is unavailable/);
+    const actual = await createEcgSession(model, async () => {
+        assert.fail('WASM should not be attempted');
+    }, false, (text) => statuses.push(text), async (bytes, options) => {
+        assert.equal(bytes, model);
+        assert.deepEqual(options.executionProviders, ['webgl']);
+        return session;
+    });
+    assert.equal(actual, session);
+    assert.match(statuses[0], /WebGPU is unavailable.*WebGL/);
 });
 
-test('retries GPU session failures on CPU without downloading the model again', async () => {
+test('retries WebGPU initialization failures on WebGL using the same model bytes', async () => {
     const model = new Uint8Array([1]);
     const calls = [];
     const statuses = [];
-    const cpuSession = {};
+    const session = {};
     const actual = await createEcgSession(model, async (bytes, options) => {
         assert.equal(bytes, model);
         calls.push(options.executionProviders);
-        if (calls.length === 1) throw new Error('GPU adapter cannot load model');
+        throw new Error('GPU adapter cannot load model');
+    }, true, (text) => statuses.push(text), async (bytes, options) => {
+        assert.equal(bytes, model);
+        calls.push(options.executionProviders);
+        return session;
+    });
+    assert.equal(actual, session);
+    assert.deepEqual(calls, [['webgpu', 'wasm'], ['webgl']]);
+    assert.match(statuses[1], /WebGPU initialization failed.*WebGL/);
+});
+
+test('falls back to CPU if WebGL cannot initialize, with or without WebGPU', async () => {
+    const model = new Uint8Array([1]);
+    for (const hasWebGpu of [false, true]) {
+        const calls = [];
+        const statuses = [];
+        const cpuSession = {};
+        const actual = await createEcgSession(model, async (bytes, options) => {
+            assert.equal(bytes, model);
+            calls.push(options.executionProviders);
+            if (options.executionProviders.includes('webgpu')) throw new Error('WebGPU unavailable');
+            return cpuSession;
+        }, hasWebGpu, (text) => statuses.push(text), async (bytes, options) => {
+            assert.equal(bytes, model);
+            calls.push(options.executionProviders);
+            throw new Error('WebGL context or model operators unavailable');
+        });
+        assert.equal(actual, cpuSession);
+        assert.deepEqual(calls, hasWebGpu ? [['webgpu', 'wasm'], ['webgl'], ['wasm']] : [['webgl'], ['wasm']]);
+        assert.match(statuses.at(-1), /WebGL initialization failed.*CPU/);
+    }
+});
+
+test('handles a failed lazy WebGL import by falling back to CPU', async () => {
+    const cpuSession = {};
+    const actual = await createEcgSession(new Uint8Array(), async (_, options) => {
+        assert.deepEqual(options.executionProviders, ['wasm']);
         return cpuSession;
-    }, true, (text) => statuses.push(text));
+    }, false, () => {}, async () => { throw new TypeError('Failed to fetch dynamically imported module'); });
     assert.equal(actual, cpuSession);
-    assert.deepEqual(calls, [['webgpu', 'wasm'], ['wasm']]);
-    assert.match(statuses[1], /GPU initialization failed/);
 });
 
 test('propagates CPU failures so the existing worker error handler can report them', async () => {
@@ -62,6 +102,6 @@ test('propagates CPU failures so the existing worker error handler can report th
     for (const hasWebGpu of [false, true]) {
         await assert.rejects(createEcgSession(new Uint8Array(), async () => {
             throw failure;
-        }, hasWebGpu, () => {}), (error) => error === failure);
+        }, hasWebGpu, () => {}, async () => { throw new Error('WebGL unavailable'); }), (error) => error === failure);
     }
 });

@@ -14,6 +14,7 @@ ort.env.wasm.wasmPaths = {
 	mjs: new URL(wasmModuleUrl, self.location.href).href
 };
 let session: ort.InferenceSession | undefined;
+let tensorRuntime = ort;
 let labels: string[] | undefined;
 let running = false;
 const send = (message: InferenceMessage) => self.postMessage(message);
@@ -62,7 +63,14 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 				model,
 				(bytes, options) => ort.InferenceSession.create(bytes, options),
 				'gpu' in navigator,
-				(text) => send({ type: 'status', text })
+				(text) => send({ type: 'status', text }),
+				async (bytes, options) => {
+					// Keep WebGL separate: the /all bundle uses incompatible JSEP WASM assets.
+					const webgl = await import('onnxruntime-web/webgl');
+					const initialized = await webgl.InferenceSession.create(bytes, options);
+					tensorRuntime = webgl;
+					return initialized;
+				}
 			);
 			if (initialized.inputNames[0] !== 'ecg' || initialized.outputNames[0] !== 'logits') {
 				await initialized.release();
@@ -72,7 +80,7 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 		}
 		send({ type: 'status', text: 'Analyzing the database ECG waveform…' });
 		const started = performance.now();
-		const input = new ort.Tensor('float32', prepared, [1, 1, 5000]);
+		const input = new tensorRuntime.Tensor('float32', prepared, [1, 1, 5000]);
 		let output: ort.InferenceSession.ReturnType | undefined;
 		try {
 			output = await session.run({ ecg: input });
