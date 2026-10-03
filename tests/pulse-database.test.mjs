@@ -10,7 +10,7 @@ function databaseMock(readings, cap = 1000) {
         const url = new URL(input);
         calls.push({ url, signal: options.signal });
         assert.equal(options.headers.apikey, 'test-key');
-        assert.equal(url.searchParams.get('select'), 'id,puls');
+        assert.equal(url.searchParams.get('select'), 'id,created_at,puls');
         assert.equal(url.searchParams.get('order'), 'id.desc');
         assert.equal(url.searchParams.has('puls'), false);
         const [operator, cutoff] = url.searchParams.get('id').split('.');
@@ -35,14 +35,33 @@ test('pages across API caps, uses a fixed snapshot and shared timeout signal', a
     assert.ok(calls.every((call) => call.signal === calls[0].signal));
 });
 
-test('fetches no pulse data for unset/invalid rates or an empty dashboard', async () => {
+test('always checks timestamps even with unset/invalid rates; empty dashboards do not fetch', async () => {
     const forbidden = () => { throw new Error('Unexpected fetch'); };
     for (const rate of [null, '', 'oops', '9', '1001']) {
-        const result = await load(forbidden, 1200, rate);
+        const { fetcher, calls } = databaseMock(rows(1200));
+        const result = await load(fetcher, 1200, rate);
         assert.equal(result.sampleRate, null);
         assert.notEqual(result.status, 'error');
+        assert.equal(result.timestampsInvalid, true);
+        assert.equal(calls.length, 1);
     }
     assert.equal((await load(forbidden, undefined)).duration, 0);
+});
+
+test('uses timestamp timing by default and ignores an old configured rate', async () => {
+    const timestampRows = rows(1300).map((row) => ({ ...row, created_at: new Date(1700000000000 + (row.id - 1) * 10).toISOString() }));
+    for (const rate of [null, '250', 'oops']) {
+        const { fetcher, calls } = databaseMock(timestampRows, 200);
+        const result = await load(fetcher, 1200, rate);
+        assert.equal(result.status, 'ready', result.reason);
+        assert.ok(Math.abs(result.bpm - 60) < 2);
+        assert.equal(result.timing, 'timestamps');
+        assert.equal(result.timestampsInvalid, false);
+        assert.equal(result.sampleRate, null);
+        assert.equal(result.firstRecordId, 200);
+        assert.equal(result.lastRecordId, 1200);
+        assert.equal(calls.length, 6);
+    }
 });
 
 test('keeps null samples as continuity breaks and reports insufficient/empty data', async () => {
