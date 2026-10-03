@@ -30,9 +30,7 @@
 	let ecgState = $state.raw({ busy: false, error: '' });
 	let emgStale = $derived(emgState.busy || !!emgState.error || (emgResult?.window.lastRecordId != null && displayed.readings[0]?.id !== emgResult.window.lastRecordId));
 	let ecgStale = $derived(ecgState.busy || !!ecgState.error || !!displayed.ecg.error || (!!ecgResult && (ecgResult.window.firstRecordId !== displayed.ecg.firstRecordId || ecgResult.window.lastRecordId !== displayed.ecg.lastRecordId || ecgResult.window.available !== displayed.ecg.available || ecgResult.window.rowCount !== displayed.ecg.rowCount)));
-	let manualRequest = $state(0);
 	let gyroRefreshRequest = $state.raw({ sequence: 0, manual: false });
-	let requestedPass = false;
 	// Rows newer than this arrived in the latest refresh and flash once in the log.
 	let freshAfter = $state<number | null>(null);
 	const pageSize = 20;
@@ -77,7 +75,6 @@
 		if (autoRefresh) void refresh();
 	}
 	async function refresh(manual = false) {
-		if (manual) requestedPass = true;
 		// Gyro loading follows every refresh request, even while the physiological loader is busy or fails.
 		gyroRefreshRequest = { sequence: gyroRefreshRequest.sequence + 1, manual };
 		if (refreshing) return;
@@ -88,12 +85,11 @@
 			await invalidate('app:readings');
 			if (!data.error) {
 				lastSuccess = data;
-				if (requestedPass) manualRequest++;
 				freshAfter = newest;
 			}
 		}
 		catch { refreshError = 'Refresh failed.'; }
-		finally { requestedPass = false; refreshing = false; }
+		finally { refreshing = false; }
 	}
 </script>
 
@@ -185,7 +181,7 @@
 			<EcgAnalysis window={displayed.ecg} connectionError={failure} onresult={(result) => { ecgResult = result; }} onstate={(state) => { ecgState = state; }} />
 		</div>
 		<div class="min-w-0 lg:col-span-8">
-			<EmgAnalysis throughId={displayed.readings[0]?.id} connectionError={failure} monitoring={autoRefresh} {refreshing} {manualRequest} onresult={(result) => { emgResult = result; }} onstate={(state) => { emgState = state; }} />
+			<EmgAnalysis throughId={displayed.readings[0]?.id} connectionError={failure} onresult={(result) => { emgResult = result; }} onstate={(state) => { emgState = state; }} />
 		</div>
 	</div>
 

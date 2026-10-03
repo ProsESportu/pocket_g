@@ -38,9 +38,8 @@ separate adapter and SPA fallback configuration.
 
 The page automatically refreshes every five seconds while open, including in a
 background tab. Returning to the tab or resuming monitoring refreshes immediately.
-Pause/Resume controls both refresh and automatic EMG analysis; active runs may
-finish after pausing. Manual refresh requests one EMG analysis pass even while
-paused. ECG analysis never runs automatically; it starts only from **Analyze ECG**.
+Pause/Resume controls refresh and the gyro session. ECG and EMG analysis never
+run automatically; they start only from **Analyze ECG** and **Analyze EMG**.
 Browser throttling or suspension can delay the five-second cadence. Failed refreshes
 preserve the last successful charts, cards, table, count, and fetch timestamp.
 
@@ -90,16 +89,15 @@ starts with existing history. Blocked browser storage is reported explicitly.
 Navigation aborts loading, and reset invalidates in-flight refreshes. Database
 access permissions are unchanged by this feature.
 
-## Continuous monitoring and coach’s notes
+## Model analysis and coach’s notes
 
 ECG runs only when **Analyze ECG** is pressed, on the 10-second window shown at
 that moment; **Cancel** stops a run and keeps the previous result. When newer
 samples arrive, the panel says so until it is analyzed again.
-EMG runs automatically: one active analysis and one pending snapshot, replaced by
-the latest fresh window. Unchanged completed windows are skipped; manual refresh
-can explicitly rerun them. Model sessions are reused. EMG failures retry after
-5, 10, 20, 40, then at most 60 seconds; success resets backoff. Pause prevents
-new EMG runs and retries. All results stay in browser memory and end when the
+EMG works the same way with **Analyze EMG**: it loads up to 60 continuous
+seconds ending at the newest record shown when pressed, and **Cancel EMG
+analysis** stops loading or inference. After a failure the button offers a retry.
+Model sessions are reused. All results stay in browser memory and end when the
 dashboard closes. No notes are written to Supabase.
 
 Coach’s notes include every ECG output with an independent sigmoid score ≥ 0.80,
@@ -246,7 +244,7 @@ environment with NumPy/SciPy; Python is not required to run the app or tests.
 
 ## Experimental EMG fatigue analysis
 
-The EMG panel automatically analyzes fresh raw EMG from
+The EMG panel analyzes raw EMG, when **Analyze EMG** is pressed, from
 `public.ekgemgpuls.emg`. This integration uses the supplied standardized logistic
 regression classifier from `EMG_fatigue_detection`, upstream revision
 `1825550c132de4fca2178a34ea9ce5db375a1de6`. The acquisition rate is configured as
@@ -270,7 +268,7 @@ unavailable reason without fatigue scores. The model downloads only after those
 checks pass. Preprocessing and inference run in a dedicated browser worker with
 the app's existing ONNX Runtime Web 1.30.0 CPU WASM runtime and one thread.
 The session is reused; navigation stops database loading and terminates the worker.
-Automatic retry starts a fresh worker after errors. Results stay in browser memory.
+Retrying after an error starts a fresh worker. Results stay in browser memory.
 
 The original model expects features from 20–450 Hz filtered EMG, which cannot be
 reproduced at 125 Hz (Nyquist frequency 62.5 Hz). A separate
@@ -294,8 +292,8 @@ numbering and baseline; a window can contain part of an exercise set.
 
 The panel shows per-repetition scores, first trigger, record range, Warsaw
 timestamps, and JSON export containing every feature, score, model hash,
-preprocessing profile, and experimental status. Fresh readings automatically replace a
-completed snapshot only when their analysis finishes. Loading and errors retain the
+preprocessing profile, and experimental status. A new analysis replaces the
+completed snapshot only when it finishes. Loading and errors retain the
 previous result with a stale label. Successful replacement with no trigger or unavailable data
 clears its fatigue coach note. Coach notes identify the analyzed range and link
 only the portion overlapping the currently visible signal strip.
