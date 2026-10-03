@@ -89,6 +89,62 @@ starts with existing history. Blocked browser storage is reported explicitly.
 Navigation aborts loading, and reset invalidates in-flight refreshes. Database
 access permissions are unchanged by this feature.
 
+## Workout insights and recording quality
+
+**Rep consistency** appears above the EMG fatigue-score table for a completed
+snapshot. It charts the seconds between consecutive detected EMG peaks, labeled
+by rep pair, and requires at least three finite, strictly increasing peak times.
+The median interval is the dashed reference line. Timing variation is the
+population standard deviation divided by the mean interval, multiplied by 100;
+lower variation means more consistent detected timing. Hover, tap, or focus a
+bar to see its interval and percentage difference from the median. Numeric
+values are also available in an expandable table. These are peak-to-peak times,
+not measured movement phases or assessments of fatigue or technique. The chart
+shares the EMG snapshot's record range and stale state; moving windows reset its
+rep numbering.
+
+**Energy by detected set** partitions the existing session's positive kinetic
+work into movement sets. A set starts when smoothed gyro speed reaches 0.05 rad/s
+and finishes after five continuous, recorded seconds below that threshold.
+Shorter rests stay in the same set. The final unclosed set is Ongoing; invalid
+samples, ID gaps, repeated/backward timestamps, and capture gaps over two seconds
+end an open set as Interrupted. No new samples means no newly confirmed rest.
+Set duration and bounds run from its first to last active sample, including
+short pauses between them and excluding trailing rest. Sets beginning at a
+loaded recording boundary can cover only part of an exercise set. This is an
+engineering heuristic rather than verified exercise segmentation.
+
+Each set receives the same positive energy increments used for the session
+total, without resetting smoothing at normal set boundaries. Set work therefore
+reconciles with the session total. Bars show joules, duration, and status, with
+record ranges and Warsaw capture times in expandable details. Changing mass or
+pivot recalculates work without changing detected boundaries. Reset clears sets
+with the energy session; reload reconstructs them from the same saved tab-local
+reset boundary. Constant-speed movement may form a zero-work set because the
+estimate counts increases in kinetic energy, not the cost of sustaining motion.
+
+**Recording quality** under the signal strip examines the original fetched
+physiological rows before invalid timestamps are excluded from charts. Its
+Loaded signal window usually covers about 12.5 seconds, while the strip remains
+10 seconds; the actual loaded count and measurable capture span are shown.
+Channel percentages count finite values out of loaded rows, with missing-sample
+counts and longest missing runs. Details show invalid/non-increasing timestamps,
+absent IDs, and capture pauses over the larger of one second or five median
+positive consecutive sample intervals. Observed timing is derived from those
+intervals and never changes an analysis model's assumed sampling rate.
+
+Gyro session quality is calculated separately for the complete loaded gyro
+session, even before mass is configured. It requires all three finite axes and
+a valid timestamp, and uses the energy calculation's two-second gap limit.
+Stationary gyro readings are valid. Usable duration includes only continuous
+intervals with available endpoint values. ID gaps and timestamp pauses are
+reported separately and may describe the same interruption. These indicators
+describe data completeness and continuity, not sensor placement or clinical
+signal quality. Last capture and last successful fetch times are shown
+separately; failed refreshes retain the prior summary as stale, and pausing
+monitoring is labeled independently. No additional database requests, models,
+or persisted workout records are introduced by these features.
+
 ## Continuous monitoring and coach’s notes
 
 ECG and EMG run independently: each has one active analysis and one pending

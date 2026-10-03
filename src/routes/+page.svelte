@@ -3,6 +3,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Search, TriangleAlert } from '@lucide/svelte';
 	import SessionStrip from '#lib/SessionStrip.svelte';
+	import RecordingQuality from '#lib/RecordingQuality.svelte';
 	import GyroEnergy from '#lib/GyroEnergy.svelte';
 	import CoachNotes from '#lib/CoachNotes.svelte';
 	import EcgAnalysis from '#lib/EcgAnalysis.svelte';
@@ -168,6 +169,7 @@
 		<section class="min-w-0 lg:col-span-8" aria-labelledby="signals-title">
 			<h2 id="signals-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Your</span> <span class="outline-text">signals</span></h2>
 			<SessionStrip readings={displayed.readings} heartRate={displayed.heartRate} {notes} {selectedNote} unavailable={!!failure} />
+			<RecordingQuality summary={displayed.quality} loadedAt={displayed.loadedAt} stale={!!failure} monitoring={autoRefresh} {refreshing} />
 		</section>
 		<div class="min-w-0 lg:col-span-4 lg:row-span-4">
 			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />

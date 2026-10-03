@@ -1,4 +1,5 @@
 import type { Reading } from './readings.ts';
+import { captureMilliseconds } from './capture-time.ts';
 
 // Initial engineering defaults for a positive-going pulse waveform.
 export const PULSE = {
@@ -171,21 +172,13 @@ export function heartRateAt(pulse: PulseResult, id: number): number | null {
 	return pulse.rates.find((rate) => rate.fromId <= id && id <= rate.toId)?.bpm ?? null;
 }
 
-function captureTime(value: string | undefined): number {
-	if (typeof value !== 'string') return NaN;
-	const milliseconds = Date.parse(value);
-	// Postgres timestamps can carry microseconds, which Date.parse truncates.
-	const fraction = value.match(/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/)?.[1];
-	return milliseconds + (fraction ? (Number(`0.${fraction}`) * 1000) % 1 : 0);
-}
-
 export function timestampPulseWindow(readings: PulseReading[], seconds: number = PULSE.windowSeconds) {
 	const ordered = [...readings].sort((a, b) => b.id - a.id);
 	const segment: PulseReading[] = [], times: number[] = [];
 	let invalid = '', complete = false;
 	for (const row of ordered) {
 		if (!Number.isSafeInteger(row.id) || typeof row.puls !== 'number' || !Number.isFinite(row.puls) || (segment.length && segment.at(-1)!.id !== row.id + 1)) { complete = true; break; }
-		const time = captureTime(row.created_at);
+		const time = captureMilliseconds(row.created_at);
 		if (!Number.isFinite(time)) { invalid = 'Pulse capture timestamps are missing or invalid.'; break; }
 		if (times.length && time >= times.at(-1)!) { invalid = 'Pulse capture timestamps repeat or run backwards.'; break; }
 		if (times.length && times[0] - time > seconds * 1000) { complete = true; break; }

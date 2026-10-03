@@ -7,6 +7,7 @@
 	import { loadDatabaseEmg } from './emg-readings.ts';
 	import { EmgAnalysisController, initialEmgAnalysisState } from './emg-analysis.ts';
 	import { AnalysisMonitor } from './analysis-monitor.ts';
+	import RepConsistency from './RepConsistency.svelte';
 
 	let { throughId, connectionError = '', monitoring = true, refreshing = false, manualRequest = 0, onresult, onstate = () => {} }: {
 		throughId?: number; connectionError?: string; monitoring?: boolean; refreshing?: boolean; manualRequest?: number;
@@ -83,6 +84,7 @@
 				<p class="display mt-5 text-[22px]">{result.rows.length} repetitions</p>
 				<p class="mt-2 text-[16px]">{result.triggerRep === null ? 'No experimental fatigue trigger in this window.' : `Experimental fatigue trigger at repetition ${result.triggerRep}.`}</p>
 				<p class="mt-2 text-[13px] text-muted">Trigger: 2 of the last 3 scores ≥ 58%. Analysis took {(result.elapsedMs / 1000).toFixed(2)} seconds.</p>
+				<RepConsistency rows={result.rows} />
 				<div class="mt-4 overflow-x-auto">
 					<table class="w-full text-left text-[14px] tabular-nums">
 						<caption class="sr-only">Experimental fatigue scores by repetition, unvalidated at 125 Hz</caption>
