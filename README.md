@@ -33,6 +33,40 @@ reapply it to this project.
 Validate with `npm test`, `npm run check`, and `npm run build`. The chart-data
 tests use Node.js's built-in TypeScript stripping (Node.js 22.18+).
 
+## Pulse frequency
+
+Pulse frequency automatically uses `created_at` capture timestamps to estimate
+BPM and Hz on the existing five-second/manual refresh. The sampling-rate picker
+appears only when timestamps are missing, invalid, repeated, or run backwards
+within the current continuous recording. In that case, enter the sensor’s actual
+acquisition rate (10–1,000 Hz) and click **Apply**. The fallback rate is saved in
+the `pulseSampleRate` URL parameter; valid timestamps always take priority over
+that saved rate. Raw pulse values remain in the chart and table.
+
+The server reads the latest ten seconds through paginated, snapshot-bounded
+read-only requests, capped at 10,001 rows. Calculation uses the newest continuous
+segment in record-ID order, ending at missing/nonfinite values or ID gaps.
+Timestamp mode preserves microseconds and handles irregular sample spacing;
+capture pauses longer than both one second and five median sample intervals
+start a new segment. Sampling-rate fallback uses up to `ceil(10 × rate) + 1`
+rows and assumes each consecutive row is one uniformly spaced sample.
+Unmarked recording pauses cannot be detected in fallback mode.
+
+The estimator uses a centered 40 ms moving average, a centered 1.5-second rolling
+median baseline, and positive-going peaks with 20% percentile-range prominence
+and 250 ms minimum separation. These windows and peak intervals use actual
+elapsed capture time in timestamp mode. Window edges use the available samples. Flat peaks
+use their midpoint; isolated peaks use quadratic interpolation to reduce timing
+quantization at low sampling rates. Frequency is the reciprocal of the median
+beat interval; BPM is 60 times that frequency.
+
+At least five continuous seconds and three peaks are required. Flat signals,
+estimates outside 30–240 BPM, or interval median absolute deviation above 30% of
+the median produce an unavailable reason rather than a number. These are initial
+engineering defaults, not calibrated clinical quality criteria. Pulse request
+errors preserve the last successful estimate with a stale label and its original
+sampling rate. An unavailable new recording clears the displayed estimate.
+
 ## ECGFounder ONNX analysis
 
 The dashboard includes the supplied single-lead ECGFounder FP32 model using
