@@ -1,9 +1,9 @@
 import { EMG, type EmgReading, type EmgWindow } from './emg.ts';
 
-/** Descending IDs: keep only the continuous segment ending at the snapshot's newest row. */
+/** Keep only the continuous segment ending at the snapshot's newest row. */
 export function databaseEmgWindow(readings: EmgReading[]): EmgWindow {
 	const segment: EmgReading[] = [];
-	for (const row of readings.slice(0, EMG.maxSamples)) {
+	for (const row of [...readings].sort((a, b) => b.id - a.id).slice(0, EMG.maxSamples)) {
 		if (!row || !Number.isSafeInteger(row.id) || typeof row.emg !== 'number' || !Number.isFinite(row.emg)) break;
 		const newer = segment.at(-1);
 		if (newer && (newer.id !== row.id + 1 || Date.parse(newer.created_at) - Date.parse(row.created_at) > 1000)) break;

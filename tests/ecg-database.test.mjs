@@ -40,9 +40,9 @@ function databaseMock(readings, cap = 1000) {
         assert.equal(options.headers.apikey, 'test-publishable-key');
         assert.equal(url.searchParams.get('select'), 'id,created_at,ekg');
         assert.equal(url.searchParams.get('order'), 'id.desc');
-        assert.equal(url.searchParams.get('ekg'), 'not.is.null');
+        assert.equal(url.searchParams.has('ekg'), false, 'missing newest samples must remain visible');
         const [operator, cutoff] = url.searchParams.get('id').split('.');
-        const page = readings.filter((row) => row.ekg !== null && (operator === 'lte' ? row.id <= Number(cutoff) : row.id < Number(cutoff)))
+        const page = readings.filter((row) => operator === 'lte' ? row.id <= Number(cutoff) : row.id < Number(cutoff))
             .sort((a, b) => b.id - a.id).slice(0, Math.min(cap, Number(url.searchParams.get('limit'))));
         return Response.json(page);
     };
@@ -70,14 +70,27 @@ test('counts all available values when the database has fewer than 5,000', async
     assert.equal(empty.available, 0);
 });
 
-test('uses older recorded ECG values when newer rows have no ECG value', async () => {
+test('never falls back to an old ECG recording when the newest rows have no ECG value', async () => {
     const readings = rows(12000);
     for (const row of readings.slice(6000)) row.ekg = null;
     const { fetcher } = databaseMock(readings);
     const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 12000);
-    assert.equal(window.samples.length, 5000);
+    assert.deepEqual(window.samples, []);
+    assert.equal(window.available, 0);
+    assert.equal(window.rowCount, 5000);
+    assert.equal(window.firstRecordId, 7001);
+    assert.equal(window.lastRecordId, 12000);
+});
+
+test('a missing value in the newest ECG window is not replaced with an older sample', async () => {
+    const readings = rows(6000);
+    readings[5500].ekg = null;
+    const { fetcher } = databaseMock(readings, 600);
+    const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 6000);
+    assert.equal(window.available, 4999);
     assert.equal(window.firstRecordId, 1001);
     assert.equal(window.lastRecordId, 6000);
+    assert.deepEqual(window.samples, []);
 });
 
 test('failed database fetches discard partial inputs and distinguish errors from insufficient data', async () => {

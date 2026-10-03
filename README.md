@@ -94,10 +94,12 @@ and results stay in the browser. The 118 MiB model downloads
 on the first analysis, and the session is reused until cancellation or navigation.
 Cancel terminates the worker; retry creates a fresh worker.
 
-The server loads up to 5,000 latest nonempty EKG rows (`id,created_at,ekg`) separately from
+The server loads up to 5,000 latest EKG rows (`id,created_at,ekg`) separately from
 the dashboard's 100-row chart/table query. It pages through the existing Data API
 in batches of up to 1,000, using descending IDs and the latest dashboard ID as
-a fixed upper boundary. Samples are then passed oldest to newest by record ID.
+a fixed upper boundary. Missing values stay in this newest window, so ECG never
+falls back to an older recording to fill it. Samples are then passed oldest to
+newest by record ID for waveform analysis, as with pulse and EMG.
 This handles the API's row limit and keeps new inserts from shifting pages.
 Each dashboard refresh updates this window. Click **Analyze ECG** to run the
 current window; results retain their original record IDs when new data arrives.
