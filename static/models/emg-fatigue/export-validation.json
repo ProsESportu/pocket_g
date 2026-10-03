@@ -1,0 +1,13 @@
+{
+  "training_rows": 420,
+  "max_probability_error": 2.500774070046674e-07,
+  "threshold_decisions_match": true,
+  "model_bytes": 692,
+  "operators": [
+    "Sub",
+    "Div",
+    "MatMul",
+    "Add",
+    "Sigmoid"
+  ]
+}

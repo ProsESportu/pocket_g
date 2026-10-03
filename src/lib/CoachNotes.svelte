@@ -30,7 +30,7 @@
 
 <section class="min-w-0" aria-labelledby={`${uid}-title`}>
 	<h2 id={`${uid}-title`} class="display text-[28px] md:text-[32px]"><span class="text-lime">Coach’s</span> <span class="outline-text">notes</span></h2>
-	<p class="mt-3 text-[15px] leading-relaxed text-muted">{readingCount ? `Checks on your sensors over the last ${readingCount} readings.` : 'Checks on your sensors, based on your latest readings.'}</p>
+	<p class="mt-3 text-[15px] leading-relaxed text-muted">{readingCount ? `Sensor checks over the last ${readingCount} readings, plus any experimental EMG analysis snapshot.` : 'Sensor checks and experimental EMG analysis snapshots.'}</p>
 	<p class="sr-only" aria-live="polite">{summary}</p>
 	{#if notes.length}
 		<ul class="mt-5 -mx-3 space-y-2" role="list">

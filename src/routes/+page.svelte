@@ -5,6 +5,9 @@
 	import SessionStrip from '#lib/SessionStrip.svelte';
 	import CoachNotes from '#lib/CoachNotes.svelte';
 	import EcgAnalysis from '#lib/EcgAnalysis.svelte';
+	import EmgAnalysis from '#lib/EmgAnalysis.svelte';
+	import { emgCoachNote } from '#lib/emg-coach.ts';
+	import type { EmgResult } from '#lib/emg.ts';
 	import PulseFrequency from '#lib/PulseFrequency.svelte';
 	import { signalChecks } from '#lib/coach.ts';
 	import type { PageData } from './$types';
@@ -18,8 +21,9 @@
 	let refreshError = $state('');
 	let page = $state(0);
 	let selectedNote = $state<string | null>(null);
+	let emgResult = $state.raw<EmgResult | null>(null);
 	const pageSize = 20;
-	let notes = $derived(signalChecks(displayed.readings, displayed.pulse));
+	let notes = $derived([...signalChecks(displayed.readings, displayed.pulse), ...emgCoachNote(emgResult, displayed.readings)]);
 	let filtered = $derived(displayed.readings.filter((row) => [row.id, row.created_at, row.ekg, row.emg, row.puls].join(' ').toLowerCase().includes(search.toLowerCase())));
 	let pages = $derived(Math.max(1, Math.ceil(filtered.length / pageSize)));
 	let currentPage = $derived(Math.min(page, pages - 1));
@@ -119,17 +123,20 @@
 			<p>{failure} {lastSuccess ? `Showing readings from ${time(lastSuccess.loadedAt)}.` : ''} {autoRefresh ? 'Retrying every 5 seconds.' : 'Refresh now, or resume live updates to retry.'}</p>
 		</div>
 	{/if}
-	<!-- The notes column spans both rows so it sits beside the strip and the ECG panel without leaving a gap. -->
+	<!-- Keep coach notes alongside the strip and both analysis panels. -->
 	<div class="grid items-start gap-x-8 gap-y-14 lg:grid-cols-12">
 		<section class="min-w-0 lg:col-span-8" aria-labelledby="signals-title">
 			<h2 id="signals-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Your</span> <span class="outline-text">signals</span></h2>
 			<SessionStrip readings={displayed.readings} {notes} {selectedNote} unavailable={!!failure} />
 		</section>
-		<div class="min-w-0 lg:col-span-4 lg:row-span-2">
+		<div class="min-w-0 lg:col-span-4 lg:row-span-3">
 			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />
 		</div>
 		<div class="min-w-0 lg:col-span-8">
 			<EcgAnalysis window={data.ecg} connectionError={data.error} />
+		</div>
+		<div class="min-w-0 lg:col-span-8">
+			<EmgAnalysis throughId={displayed.readings[0]?.id} connectionError={failure} onresult={(result) => { emgResult = result; }} />
 		</div>
 	</div>
 

@@ -1,0 +1,241 @@
+{
+  "runtime": "onnxruntime-web 1.23.2, WebAssembly, single thread",
+  "upstream_commit": "1825550c132de4fca2178a34ea9ce5db375a1de6",
+  "training_rows": 420,
+  "model_max_probability_error": 2.425556491769676e-7,
+  "c3d_sessions": 44,
+  "session_repetitions": 546,
+  "session_max_probability_error": 3.0793939376216883e-7,
+  "feature_max_relative_error_with_1e_6_floor": 1.4841513172511447e-12,
+  "peak_indices_match": true,
+  "mdf_values_match": true,
+  "threshold_decisions_match": true,
+  "trigger_repetitions_match": true,
+  "demo": {
+    "path": "test_data/test.c3d",
+    "repetitions": 13,
+    "trigger_rep": 9
+  },
+  "sessions": [
+    {
+      "path": "test_data/test.c3d",
+      "repetitions": 13,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/01-01.c3d",
+      "repetitions": 12,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/01-02.c3d",
+      "repetitions": 13,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/01-03.c3d",
+      "repetitions": 12,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/01-04.c3d",
+      "repetitions": 12,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/01-05.c3d",
+      "repetitions": 14,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/02-01.c3d",
+      "repetitions": 14,
+      "trigger_rep": 10
+    },
+    {
+      "path": "data/Signals/02-02.c3d",
+      "repetitions": 13,
+      "trigger_rep": 12
+    },
+    {
+      "path": "data/Signals/02-03.c3d",
+      "repetitions": 14,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/02-04.c3d",
+      "repetitions": 13,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/03-01.c3d",
+      "repetitions": 13,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/03-02.c3d",
+      "repetitions": 13,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/03-03.c3d",
+      "repetitions": 10,
+      "trigger_rep": 7
+    },
+    {
+      "path": "data/Signals/03-04.c3d",
+      "repetitions": 14,
+      "trigger_rep": 8
+    },
+    {
+      "path": "data/Signals/04-01.c3d",
+      "repetitions": 12,
+      "trigger_rep": 12
+    },
+    {
+      "path": "data/Signals/04-02.c3d",
+      "repetitions": 11,
+      "trigger_rep": null
+    },
+    {
+      "path": "data/Signals/04-03.c3d",
+      "repetitions": 11,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/04-04.c3d",
+      "repetitions": 9,
+      "trigger_rep": null
+    },
+    {
+      "path": "data/Signals/05-01.c3d",
+      "repetitions": 13,
+      "trigger_rep": 8
+    },
+    {
+      "path": "data/Signals/05-02.c3d",
+      "repetitions": 13,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/05-03.c3d",
+      "repetitions": 13,
+      "trigger_rep": 13
+    },
+    {
+      "path": "data/Signals/05-04.c3d",
+      "repetitions": 14,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/05-05.c3d",
+      "repetitions": 9,
+      "trigger_rep": 8
+    },
+    {
+      "path": "data/Signals/06-01.c3d",
+      "repetitions": 18,
+      "trigger_rep": 13
+    },
+    {
+      "path": "data/Signals/06-02.c3d",
+      "repetitions": 15,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/06-03.c3d",
+      "repetitions": 13,
+      "trigger_rep": 10
+    },
+    {
+      "path": "data/Signals/06-04.c3d",
+      "repetitions": 9,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/07-01.c3d",
+      "repetitions": 13,
+      "trigger_rep": null
+    },
+    {
+      "path": "data/Signals/07-02.c3d",
+      "repetitions": 14,
+      "trigger_rep": null
+    },
+    {
+      "path": "data/Signals/07-03.c3d",
+      "repetitions": 15,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/07-04.c3d",
+      "repetitions": 14,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/08-01.c3d",
+      "repetitions": 11,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/08-02.c3d",
+      "repetitions": 12,
+      "trigger_rep": 12
+    },
+    {
+      "path": "data/Signals/08-03.c3d",
+      "repetitions": 13,
+      "trigger_rep": 10
+    },
+    {
+      "path": "data/Signals/08-04.c3d",
+      "repetitions": 8,
+      "trigger_rep": null
+    },
+    {
+      "path": "data/Signals/09-01.c3d",
+      "repetitions": 12,
+      "trigger_rep": 8
+    },
+    {
+      "path": "data/Signals/09-02.c3d",
+      "repetitions": 12,
+      "trigger_rep": 11
+    },
+    {
+      "path": "data/Signals/09-03.c3d",
+      "repetitions": 10,
+      "trigger_rep": null
+    },
+    {
+      "path": "data/Signals/09-04.c3d",
+      "repetitions": 11,
+      "trigger_rep": 8
+    },
+    {
+      "path": "data/Signals/10-01.c3d",
+      "repetitions": 11,
+      "trigger_rep": 10
+    },
+    {
+      "path": "data/Signals/10-02.c3d",
+      "repetitions": 12,
+      "trigger_rep": 10
+    },
+    {
+      "path": "data/Signals/10-03.c3d",
+      "repetitions": 13,
+      "trigger_rep": 9
+    },
+    {
+      "path": "data/Signals/10-04.c3d",
+      "repetitions": 13,
+      "trigger_rep": 8
+    },
+    {
+      "path": "data/Signals/11-01.c3d",
+      "repetitions": 12,
+      "trigger_rep": 9
+    }
+  ]
+}

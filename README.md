@@ -140,6 +140,81 @@ environment with NumPy/SciPy; Python is not required to run the app or tests.
 
 ---
 
+## Experimental EMG fatigue analysis
+
+Click **Analyze EMG** below the ECG panel to analyze raw EMG from
+`public.ekgemgpuls.emg`. This integration uses the supplied standardized logistic
+regression classifier from `EMG_fatigue_detection`, upstream revision
+`1825550c132de4fca2178a34ea9ce5db375a1de6`. The acquisition rate is configured as
+**125 Hz**, as confirmed for this sensor. Each consecutive database row is
+assumed to contain one uniformly spaced raw EMG sample.
+
+Analysis is an **experimental, retrospective snapshot** of the latest continuous
+recording, up to 7,500 samples (60 seconds). EMG is fetched only when requested,
+using the dashboard's latest record ID as a fixed upper boundary. Read-only
+requests page in descending-ID order, at most 1,000 rows per page, with a shared
+30-second timeout. Null samples remain in the query. The newest segment ends at
+missing/nonfinite EMG values, missing record IDs, or a forward timestamp gap
+exceeding one second. Older segments are never stitched into the input.
+Timestamps describe the recording and detectable pauses; they do not determine
+the configured sample rate. Missing, repeated, or unreliable timestamps cannot
+reveal otherwise unmarked capture pauses.
+
+At least 1,250 continuous samples (10 seconds) and three detected repetitions
+are required. Short, flat, or insufficient-repetition recordings report an
+unavailable reason without fatigue scores. The model downloads only after those
+checks pass. Preprocessing and inference run in a dedicated browser worker with
+the app's existing ONNX Runtime Web 1.30.0 CPU WASM runtime and one thread.
+The session is reused; Cancel stops database loading and terminates the worker.
+Retry starts a fresh worker after errors. Results stay in browser memory.
+
+The original model expects features from 20–450 Hz filtered EMG, which cannot be
+reproduced at 125 Hz (Nyquist frequency 62.5 Hz). A separate
+`experimental-125hz.json` profile uses a fourth-order 20–55 Hz Butterworth
+bandpass, 50 Hz notch with Q=30, rectification, and fourth-order 5 Hz envelope.
+Filtering uses float64 SciPy-compatible forward/backward filtering with odd
+padding. Repetitions use two-second peak spacing and relative prominence 0.2,
+midpoint boundaries, RMS, Welch median frequency, the first-three-repetition
+baseline, first differences, and rolling means. All 24 features retain their
+original order; sample indices and repetition duration remain actual sample
+counts at 125 Hz. There is no resampling, retraining, amplitude calibration, or
+replacement of classifier weights.
+
+The original threshold is **0.58**, with fatigue triggered by **2 of the last 3**
+scores at or above the threshold, including partial initial windows. Smoothing
+is disabled. These scores and the trigger are **unvalidated at 125 Hz**:
+reduced bandwidth, acquisition conditions, amplitude units, and sample-index
+features differ from training. Engineering parity tests do not establish
+fatigue-detection accuracy for this sensor. Moving the window resets repetition
+numbering and baseline; a window can contain part of an exercise set.
+
+The panel shows per-repetition scores, first trigger, record range, Warsaw
+timestamps, and JSON export containing every feature, score, model hash,
+preprocessing profile, and experimental status. New readings do not replace a
+completed snapshot automatically. Retries, cancellation, and errors retain the
+previous result. Successful replacement with no trigger or unavailable data
+clears its fatigue coach note. Coach notes identify the analyzed range and link
+only the portion overlapping the currently visible signal strip.
+
+Original model assets, metadata, MIT license, and upstream validation reports
+are preserved under `static/models/emg-fatigue/`. The 692-byte model SHA-256 is
+`4e15901646a835d4c7e54acb71c0e96e3df5ab946403ead8b5687e6ada3f5e5e`;
+the worker verifies it against metadata before creating the inference session.
+The supplied upstream reports describe the original pipeline, not the new
+125 Hz profile. Deployments must serve the model, JSON profile, and worker
+WASM/MJS assets as files rather than HTML fallbacks.
+
+`npm test` includes EMG pagination and continuity, cancellation and retry,
+snapshot provenance, coach notes and export, independent SciPy parity for the
+125 Hz pipeline (including filter edges and all features), and real WASM model
+parity against all 420 upstream reference rows. Probability error must be at
+most `2e-6`, with matching threshold and per-session trigger decisions.
+Regenerate the profile and DSP fixtures with `python tests/generate-emg-reference.py`
+in an environment containing NumPy and SciPy. Python is unnecessary for running
+the app or its tests. Also run `npm run check` and `npm run build`.
+
+---
+
 ## Original scaffold instructions
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
