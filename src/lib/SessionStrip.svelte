@@ -1,15 +1,21 @@
 <script lang="ts">
 	import type { Reading } from './readings';
 	import type { CoachNote } from './coach';
-	import { chartData, type Plot, type SensorField } from './chart';
+	import { chartData, type Plot, type Scale, type SensorField } from './chart';
 	import { COACH_ICONS } from './coach-icons';
+	import { emgActivity } from './emg-activity';
+	import { heartRateAt, type PulseResult } from './pulse';
 
-	let { readings, notes = [], selectedNote = null, unavailable = false }: { readings: Reading[]; notes?: CoachNote[]; selectedNote?: string | null; unavailable?: boolean } = $props();
+	let { readings, heartRate, notes = [], selectedNote = null, unavailable = false }: { readings: Reading[]; heartRate: PulseResult; notes?: CoachNote[]; selectedNote?: string | null; unavailable?: boolean } = $props();
 
-	const LANES: { field: SensorField; label: string; pen: string }[] = [
-		{ field: 'ekg', label: 'EKG', pen: 'var(--color-pen-ekg)' },
-		{ field: 'emg', label: 'EMG', pen: 'var(--color-pen-emg)' },
-		{ field: 'puls', label: 'Pulse', pen: 'var(--color-pen-puls)' }
+	type Lane = { field: SensorField; label: string; pen: string; digits: number; unit?: string; scale?: Scale };
+	// Over 10 seconds raw EMG would draw a solid block, so it plots its activity envelope from zero, and pulse
+	// plots beat-to-beat heart rate. Minimum scales keep a quiet muscle or normal beat-to-beat variation from
+	// swinging across the whole lane.
+	const LANES: Lane[] = [
+		{ field: 'ekg', label: 'EKG', pen: 'var(--color-pen-ekg)', digits: 3 },
+		{ field: 'emg', label: 'EMG activity', pen: 'var(--color-pen-emg)', digits: 0, scale: { floor: 0, minSpan: 100 } },
+		{ field: 'puls', label: 'Pulse', pen: 'var(--color-pen-puls)', digits: 0, unit: 'BPM', scale: { minSpan: 30 } }
 	];
 	// Lane height is a multiple of the 40px major grid so the chart grid runs on across lanes.
 	const HEIGHT = 120;
@@ -18,10 +24,12 @@
 	let selectedId = $state<number | null>(null);
 
 	let frame = $derived<Plot>({ left: 8, right: Math.max(width - 14, 9), top: 16, bottom: HEIGHT - 16, width, height: HEIGHT });
+	let activity = $derived(emgActivity(readings));
 	let lanes = $derived(LANES.map((lane) => {
-		const chart = chartData(readings, lane.field, frame);
-		const values = chart.points.map((point) => point.row[lane.field]).filter((raw): raw is number => raw !== null && Number.isFinite(raw));
-		return { ...lane, chart, isolated: chart.isolated, head: chart.points.findLast((point) => point.y !== null), range: values.length ? { min: Math.min(...values), max: Math.max(...values) } : null };
+		const chart = chartData(readings, (reading) => read(reading, lane.field), frame, lane.scale);
+		const values = chart.points.map((point) => read(point.row, lane.field)).filter((raw): raw is number => raw !== null && Number.isFinite(raw));
+		const empty = lane.field !== 'puls' ? `No ${lane.label} values in these readings.` : heartRate.status === 'ready' ? 'No clear beats in these readings.' : `No heart rate yet. ${heartRate.reason}`;
+		return { ...lane, chart, empty, isolated: chart.isolated, head: chart.points.findLast((point) => point.y !== null), range: values.length ? { min: Math.min(...values), max: Math.max(...values) } : null };
 	}));
 	let points = $derived(lanes[0].chart.points);
 	let latest = $derived(points.length - 1);
@@ -29,6 +37,9 @@
 	let inspecting = $derived(found >= 0);
 	let index = $derived(inspecting ? found : latest);
 	let row = $derived(points[index]?.row);
+	// Arrow keys move about a hundredth of the window (0.1 s over 10 s), Page keys ten times that.
+	let stride = $derived(Math.max(1, Math.round(points.length / 100)));
+	let span = $derived(points.length ? Date.parse(points[latest].row.created_at) - Date.parse(points[0].row.created_at) : 0);
 	// Only the note the athlete selected is highlighted, so the chart stays readable.
 	let band = $derived.by(() => {
 		const note = notes.find((item) => item.id === selectedNote);
@@ -41,18 +52,24 @@
 		return { x: Math.max(0, Math.min(x1, width - w)), w, Icon: COACH_ICONS[note.kind] };
 	});
 	// Enough fractional digits that the start, middle and end ticks never read the same.
-	let tickDigits = $derived.by(() => {
-		const half = points.length ? (Date.parse(points[latest].row.created_at) - Date.parse(points[0].row.created_at)) / 2 : 0;
-		return half >= 1000 ? 0 : half >= 100 ? 1 : half >= 10 ? 2 : 3;
-	});
+	let tickDigits = $derived(span / 2 >= 1000 ? 0 : span / 2 >= 100 ? 1 : span / 2 >= 10 ? 2 : 3);
 
 	const time = (value: number | string, digits = 0) => new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: digits ? digits as 1 | 2 | 3 : undefined, timeZone: 'Europe/Warsaw' }).format(new Date(value));
-	const number = (raw: number) => new Intl.NumberFormat('en-GB', { maximumFractionDigits: 3 }).format(raw);
-	const value = (reading: Reading | undefined, field: SensorField) => {
-		const raw = reading?.[field];
-		return raw === null || raw === undefined || !Number.isFinite(raw) ? 'No value' : number(raw);
+	const number = (raw: number, digits: number) => new Intl.NumberFormat('en-GB', { maximumFractionDigits: digits }).format(raw);
+	function read(reading: Reading | undefined, field: SensorField) {
+		if (!reading) return null;
+		if (field === 'emg') return activity.get(reading.id) ?? null;
+		return field === 'puls' ? heartRateAt(heartRate, reading.id) : reading[field];
+	}
+	const value = (reading: Reading | undefined, lane: Lane) => {
+		const raw = read(reading, lane.field);
+		return raw === null || !Number.isFinite(raw) ? null : number(raw, lane.digits);
 	};
-	let valuetext = $derived(row ? `${time(row.created_at, 3)}, record ${row.id}. ${LANES.map((lane) => `${lane.label} ${value(row, lane.field)}`).join(', ')}.` : 'No readings');
+	const withUnit = (reading: Reading | undefined, lane: Lane) => {
+		const shown = value(reading, lane);
+		return shown === null ? 'No value' : lane.unit ? `${shown} ${lane.unit}` : shown;
+	};
+	let valuetext = $derived(row ? `${time(row.created_at, 3)}, record ${row.id}. ${LANES.map((lane) => `${lane.label} ${withUnit(row, lane)}`).join(', ')}.` : 'No readings');
 
 	function inspect(event: PointerEvent) {
 		const axis = (event.currentTarget as HTMLElement).querySelector('[data-axis]');
@@ -67,10 +84,10 @@
 	}
 	function step(event: KeyboardEvent) {
 		let next = index;
-		if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next--;
-		else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next++;
-		else if (event.key === 'PageDown') next -= 10;
-		else if (event.key === 'PageUp') next += 10;
+		if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next -= stride;
+		else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next += stride;
+		else if (event.key === 'PageDown') next -= stride * 10;
+		else if (event.key === 'PageUp') next += stride * 10;
 		else if (event.key === 'Home') next = 0;
 		else if (event.key === 'End' || event.key === 'Escape') next = -1;
 		else return;
@@ -84,7 +101,7 @@
 	{#if points.length}
 		<div class="flex items-baseline pt-4 pr-12 pb-2 pl-4 md:grid md:grid-cols-[10.5rem_minmax(0,1fr)] md:pl-0">
 			<p class="label hidden text-muted md:block md:pl-6">Latest</p>
-			<p class="label text-muted">Last {points.length} readings, oldest on the left</p>
+			<p class="label text-muted">Last {span >= 1000 ? `${Math.round(span / 1000)} seconds` : `${points.length} readings`}, oldest on the left</p>
 		</div>
 		<div
 			class="inspector cursor-crosshair touch-pan-y select-none"
@@ -103,12 +120,15 @@
 			onkeydown={step}
 		>
 			{#each lanes as lane, laneIndex (lane.field)}
-				{@const now = value(points[latest]?.row, lane.field)}
+				{@const now = value(points[latest]?.row, lane)}
 				<div class={['grid border-white/20 md:grid-cols-[10.5rem_minmax(0,1fr)]', laneIndex > 0 && 'md:border-t']}>
 					<div class="grid grid-cols-[1fr_auto] items-end gap-x-3 px-4 pt-3 pb-2 md:block md:pt-3 md:pr-4 md:pl-6">
 						<p class="label flex items-center gap-2 text-white"><span aria-hidden="true" class="h-[3px] w-5" style:background={lane.pen}></span>{lane.label}</p>
-						<p class={['row-span-2 self-center leading-none md:mt-2', now === 'No value' ? 'text-[15px] font-medium text-muted' : 'text-[30px] [font-weight:800] [font-stretch:112%]']}>{now}</p>
-						{#if lane.range}<p class="text-[12px] text-muted tabular-nums md:mt-2">Range {number(lane.range.min)} to {number(lane.range.max)}</p>{/if}
+						<p class={['row-span-2 self-center leading-none md:mt-2', now === null ? 'text-[15px] font-medium text-muted' : 'text-[30px] [font-weight:800] [font-stretch:112%]']}>{now ?? 'No value'}{#if now !== null && lane.unit}<span class="label ml-1.5 text-muted">{lane.unit}</span>{/if}</p>
+						{#if lane.range}
+							{@const [min, max] = [number(lane.range.min, lane.digits), number(lane.range.max, lane.digits)]}
+							<p class="text-[12px] text-muted tabular-nums md:mt-2">{min === max ? `Steady at ${min}` : `Range ${min} to ${max}`}{lane.unit ? ` ${lane.unit}` : ''}</p>
+						{/if}
 					</div>
 					<div class="chart-grid relative h-[120px] min-w-0">
 						{#if lane.chart.validCount}
@@ -133,7 +153,7 @@
 								{/if}
 							</svg>
 						{:else}
-							<p class="absolute inset-0 grid place-items-center px-4 text-center text-[15px] text-muted">No {lane.label} values in these readings.</p>
+							<p class="absolute inset-0 grid place-items-center px-4 text-center text-[15px] text-muted">{lane.empty}</p>
 						{/if}
 						{#if laneIndex === 0 && band}
 							<span aria-hidden="true" class="absolute top-1 grid size-5 -translate-x-1/2 place-items-center bg-lime text-night" style:left={`${band.x + band.w / 2}px`}><band.Icon size={14} strokeWidth={2.75} /></span>
@@ -154,7 +174,7 @@
 			<p><span class="label text-lime">{inspecting ? 'Inspecting' : 'Latest'}</span> <span class="ml-1 tabular-nums">{row ? `${time(row.created_at, 3)}, record ${row.id}` : ''}</span></p>
 			<p class="flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
 				{#each lanes as lane (lane.field)}
-					<span class="flex items-center gap-1.5 text-muted"><span aria-hidden="true" class="h-[3px] w-3" style:background={lane.pen}></span>{lane.label} <strong class="font-bold text-white">{value(row, lane.field)}</strong></span>
+					<span class="flex items-center gap-1.5 text-muted"><span aria-hidden="true" class="h-[3px] w-3" style:background={lane.pen}></span>{lane.label} <strong class="font-bold text-white">{withUnit(row, lane)}</strong></span>
 				{/each}
 			</p>
 		</div>
@@ -173,7 +193,7 @@
 	.band { fill: #fff; opacity: 0.14; animation: band-in 150ms ease-out both; }
 	.band-edge { stroke: var(--color-lime); stroke-width: 1.5; }
 	.cursor { stroke: #fff; stroke-opacity: 0.55; stroke-width: 1; }
-	.trace { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; animation: pen-write 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--lane) * 60ms); }
+	.trace { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; animation: pen-write 900ms cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--lane) * 60ms); }
 	.head { stroke: var(--color-night); stroke-width: 2; transition: cy 200ms ease-out; animation: head-in 200ms ease-out both; animation-delay: calc(900ms + var(--lane) * 60ms); }
 	.marker { stroke: var(--color-night); stroke-width: 2; }
 	/* The plot panels are positioned, so an outline on the slider would sit underneath them; draw the ring on a layer above. */

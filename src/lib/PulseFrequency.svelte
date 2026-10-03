@@ -2,6 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import { Tween, prefersReducedMotion } from 'svelte/motion';
 	import { TriangleAlert } from '@lucide/svelte';
 	import { pulseDisplay, validPulseRate, type PulseResult } from './pulse';
 	let { result, refreshError = '', refreshing = false, frequency = false }: { result: PulseResult; refreshError?: string; refreshing?: boolean; frequency?: boolean } = $props();
@@ -17,6 +19,8 @@
 	let ownFailure = $derived(display.failure && display.failure !== refreshError ? display.failure : '');
 	let outage = $derived(!!refreshError && !display.stale);
 	let timing = $derived(display.result.timing === 'timestamps' ? 'capture timestamps' : `a ${display.result.sampleRate ?? 'missing'} Hz sampling rate`);
+	// Rolls to each new estimate, so a change between refreshes is visible.
+	const bpm = Tween.of(() => display.result.bpm ?? 0, { duration: () => (prefersReducedMotion.current ? 0 : 600), easing: cubicOut });
 	const uid = $props.id();
 
 	// A successful result is displayed directly; only a later failed refresh reads this cache.

@@ -78,3 +78,14 @@ test('preserves Postgres sub-millisecond timestamps instead of marking them dupl
     assert.equal(result.status, 'ready', result.reason);
     assert.ok(Math.abs(result.bpm - 60) < 2);
 });
+
+test('a longer window covers more beats and starts the beat-to-beat rates earlier', () => {
+    const long = Array.from({ length: 1501 }, (_, i) => ({ id: i + 1, created_at: new Date(origin + i * 10).toISOString(), puls: 500 + 100 * Math.sin(2 * Math.PI * 75 / 60 * i / 100) }));
+    const standard = estimate(long);
+    const extended = estimatePulseWithTiming(long, pulseConfiguration(null), 12.5);
+    assert.equal(standard.duration, 10);
+    assert.equal(extended.duration, 12.5);
+    assert.ok(extended.beatCount > standard.beatCount);
+    assert.ok(extended.rates[0].fromId < standard.rates[0].fromId);
+    assert.equal(extended.rates.at(-1).toId, standard.rates.at(-1).toId);
+});

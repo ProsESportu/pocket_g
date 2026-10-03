@@ -18,6 +18,7 @@
 }
 
 @layer base {
+	:root { --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); }
 	html { background: var(--color-night); color: #fff; font-family: var(--font-sans); font-synthesis: none; -webkit-tap-highlight-color: transparent; }
 	body { margin: 0; min-height: 100dvh; }
 	button, input { font: inherit; }
@@ -106,6 +107,13 @@
 	background: var(--color-lime);
 	color: #000;
 	&:hover:not(:disabled) { background: #fff; border-color: #fff; }
+}
+
+/* Disclosures open and close smoothly where ::details-content is supported; elsewhere they snap as before. */
+@media (prefers-reduced-motion: no-preference) {
+	:root { interpolate-size: allow-keywords; }
+	details::details-content { block-size: 0; overflow-y: clip; transition: block-size 300ms var(--ease-out-expo), content-visibility 300ms allow-discrete; }
+	details[open]::details-content { block-size: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
