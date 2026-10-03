@@ -12,7 +12,7 @@ export type Reading = {
 export async function loadRecentReadings(fetcher: typeof fetch, baseUrl: string, apiKey: string, seconds: number): Promise<Reading[]> {
 	const limit = Math.ceil(seconds * PULSE.maxSampleRate) + 1;
 	const rows: Reading[] = [];
-	const signal = AbortSignal.timeout(10000);
+	const signal = AbortSignal.timeout(30000);
 	let beforeId: number | undefined;
 	let pageSize = Math.min(1000, limit);
 	while (rows.length < limit) {

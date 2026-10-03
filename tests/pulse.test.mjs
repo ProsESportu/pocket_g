@@ -9,7 +9,7 @@ function waveform(bpm, rate, transform = (value) => value, seconds = 10) {
     });
 }
 
-for (const rate of [10, 25, 100, 250, 1000]) {
+for (const rate of [10, 25, 100, 250, 1000, 2000]) {
     for (const bpm of [60, 90, 120]) {
         test(`estimates ${bpm} BPM at ${rate} Hz within 2 BPM`, () => {
             const rows = waveform(bpm, rate);
@@ -105,13 +105,13 @@ test('rejects unsupported BPM and inconsistent intervals', () => {
 
 test('unset and invalid sampling configuration never produces a frequency', () => {
     assert.equal(pulseConfiguration(null).status, 'unset');
-    for (const value of ['', ' ', 'NaN', 'Infinity', '9.9', '1000.1', 'oops']) {
+    for (const value of ['', ' ', 'NaN', 'Infinity', '9.9', '2000.1', 'oops']) {
         const result = pulseConfiguration(value);
         assert.equal(result.sampleRate, null);
         assert.equal(result.bpm, null);
-        assert.match(result.reason, /10 to 1,000/);
+        assert.match(result.reason, /10 to 2,000/);
     }
-    for (const value of [NaN, Infinity, 0, 1001]) assert.equal(estimatePulse([], value).sampleRate, null);
+    for (const value of [NaN, Infinity, 0, 2001]) assert.equal(estimatePulse([], value).sampleRate, null);
 });
 
 test('refresh failures preserve the last estimate and its original rate; unavailable data clears it', () => {

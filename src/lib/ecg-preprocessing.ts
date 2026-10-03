@@ -1,17 +1,6 @@
 import { ECG_SAMPLES, ECG_BASELINE_SAMPLES, ECG_MODEL_RATE, ECG_MODEL_SAMPLES, ECG_SAMPLE_RATE, type InputMode } from './ecg.ts';
 
-// scipy.signal.iirnotch(50, 30, 125) and butter(4, [0.67, 40], 'bandpass', fs=125).
-// Steady-state initial conditions from scipy.signal.lfilter_zi. Fixed at ECG_SAMPLE_RATE (125 Hz).
-const notch = {
-	b: [0.95977356895352, 1.552946256070586, 0.95977356895352],
-	a: [1, 1.552946256070586, 0.9195471379070399],
-	zi: [0.04022643104647938, 0.04022643104647983]
-};
-const bandpass = {
-	b: [0.1947278219707764, 0, -0.7789112878831056, 0, 1.1683669318246583, 0, -0.7789112878831056, 0, 0.1947278219707764],
-	a: [1, -2.8335016506866877, 2.3831115378118417, -0.6503380115808338, 0.7916585699178833, -0.8274906841608182, 0.006403234376578401, 0.09090169822805605, 0.039259491682485645],
-	zi: [-0.19472782197740784, -0.19472782195861826, 0.5841834659086844, 0.584183465912997, -0.584183465916911, -0.5841834659114237, 0.19472782197163954, 0.19472782197103675]
-};
+import { notch, bandpass, decimation } from './ecg-filter-coefficients.ts';
 
 function filter(signal: Float64Array, coefficients: typeof notch): Float64Array {
 	const { a, b, zi } = coefficients;
@@ -20,7 +9,7 @@ function filter(signal: Float64Array, coefficients: typeof notch): Float64Array 
 	for (let i = 0; i < signal.length; i++) {
 		const input = signal[i];
 		const output = b[0] * input + state[0];
-		for (let j = 0; j < state.length - 1; j++) state[j] = b[j + 1] * input + state[j + 1] - a[j + 1] * output;
+		for (let j = 0; j < state.length - 1; j++) state[j] = state[j + 1] + b[j + 1] * input - a[j + 1] * output;
 		const last = state.length - 1;
 		state[last] = b[last + 1] * input - a[last + 1] * output;
 		result[i] = output;
@@ -41,15 +30,17 @@ function filtfilt(signal: Float64Array, coefficients: typeof notch): Float64Arra
 	return filter(forward, coefficients).reverse().slice(edge, edge + signal.length);
 }
 
-/** Filters at the recording rate, removes the baseline and standardizes. Works on any length filtfilt can pad. */
+/** Anti-aliases raw 2 kHz ECG, then filters and standardizes at the 500 Hz model rate. */
 export function prepareWaveform(signal: Float64Array, mode: InputMode): Float32Array {
 	if (signal.length <= 3 * bandpass.a.length || signal.some((value) => !Number.isFinite(value))) throw new Error('Invalid ECG waveform.');
 	if (mode === 'preprocessed') return Float32Array.from(signal);
-	const filtered = filtfilt(filtfilt(signal, notch), bandpass);
-	// Preserve the approximately 0.4-second baseline window at 125 Hz, with zero padding.
+	const resampled = downsample(signal);
+	if (resampled.length <= 3 * bandpass.a.length) throw new Error('Invalid ECG waveform.');
+	const filtered = filtfilt(filtfilt(resampled, notch), bandpass);
+	// Preserve the approximately 0.4-second baseline window at 500 Hz, with zero padding.
 	const halfWindow = (ECG_BASELINE_SAMPLES - 1) / 2;
-	const centered = new Float64Array(signal.length);
-	for (let i = 0; i < signal.length; i++) {
+	const centered = new Float64Array(filtered.length);
+	for (let i = 0; i < filtered.length; i++) {
 		const window = Array.from({ length: ECG_BASELINE_SAMPLES }, (_, j) => filtered[i + j - halfWindow] ?? 0);
 		window.sort((a, b) => a - b);
 		centered[i] = filtered[i] - window[halfWindow];
@@ -67,30 +58,28 @@ function standardize(values: Float64Array): Float32Array {
 	return prepared;
 }
 
-const sinc = (x: number) => x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
-
-/** Windowed-sinc (Lanczos) interpolation by a whole factor. Original samples pass through unchanged; edges repeat the end samples. */
-export function upsample(signal: ArrayLike<number>, factor: number, lobes = 4): Float64Array {
-	const output = new Float64Array(signal.length * factor);
-	const last = signal.length - 1;
-	for (let m = 0; m < output.length; m++) {
-		const t = m / factor, base = Math.floor(t);
-		if (t === base) { output[m] = signal[base]; continue; }
-		let sum = 0, weights = 0;
-		for (let k = base - lobes + 1; k <= base + lobes; k++) {
-			const weight = sinc(t - k) * sinc((t - k) / lobes);
-			sum += weight * signal[Math.min(Math.max(k, 0), last)];
-			weights += weight;
-		}
-		output[m] = sum / weights;
-	}
-	return output;
+/** SciPy resample_poly(up=1, down=4), symmetric 81-tap Kaiser FIR, zero extension.
+ * Compensates the 40-sample group delay: output m is centered at capture sample 4m.
+ */
+export function downsample(signal: ArrayLike<number>): Float64Array {
+    const factor = ECG_SAMPLE_RATE / ECG_MODEL_RATE;
+    const half = (decimation.length - 1) / 2;
+    const output = new Float64Array(Math.ceil(signal.length / factor));
+    for (let m = 0; m < output.length; m++) {
+        let sum = 0;
+        for (let k = 0; k < decimation.length; k++) {
+            const index = m * factor + half - k;
+            if (index >= 0 && index < signal.length) sum += decimation[k] * signal[index];
+        }
+        output[m] = sum;
+    }
+    return output;
 }
 
-/** ECGFounder input: prepared at the Pi's 125 Hz, upsampled 4x to 500 Hz, then standardized again. */
+/** Ten seconds of raw 2 kHz acquisition becomes ten seconds of model-rate ECG. */
 export function modelInput(signal: Float64Array): Float32Array {
 	if (signal.length !== ECG_SAMPLES) throw new Error('Invalid ECG waveform.');
-	const input = standardize(upsample(prepareWaveform(signal, 'raw'), ECG_MODEL_RATE / ECG_SAMPLE_RATE));
+	const input = prepareWaveform(signal, 'raw');
 	if (input.length !== ECG_MODEL_SAMPLES) throw new Error('Unexpected ECG model input size.');
 	return input;
 }

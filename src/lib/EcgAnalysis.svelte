@@ -68,7 +68,7 @@
 		<p class="mt-5 flex gap-2 text-[16px] leading-relaxed" role="alert"><TriangleAlert class="mt-1 shrink-0 text-lime" size={18} />Could not load database ECG values. {sourceError}</p>
 	{:else if !ready}
 		<div class="mt-6" role="status">
-			<p class="text-[17px] font-semibold">Needs {samples} EKG samples (10 seconds). {window.available.toLocaleString('en-GB')} so far.</p>
+			<p class="text-[17px] font-semibold">{window.reason || `Needs ${samples} EKG samples (10 seconds). ${window.available.toLocaleString('en-GB')} so far.`}</p>
 			<div class="mt-3 h-2 max-w-md overflow-hidden bg-raised" aria-hidden="true"><div class="h-full bg-lime transition-[width] duration-500 ease-out" style:width={`${Math.min(window.available / ECG_SAMPLES, 1) * 100}%`}></div></div>
 			<p class="mt-2 text-[14px] text-muted">New readings are counted on every refresh.</p>
 		</div>
@@ -110,11 +110,11 @@
 			{#if !search}<button class="btn btn-line mt-4" onclick={() => showAll = !showAll}>{showAll ? 'Show top 10 scores' : 'Show all 150 scores'}</button>{/if}
 		</div>
 	{/if}
-	<p class="mt-6 max-w-[70ch] text-[14px] leading-relaxed text-muted">ECG uses lead I at {ECG_SAMPLE_RATE} Hz ({ECG_SAMPLES / ECG_SAMPLE_RATE} seconds for {samples} samples). The database doesn’t store lead or sampling-rate metadata. The model expects {ECG_MODEL_RATE} Hz input, so this browser upsamples the samples {ECG_MODEL_RATE / ECG_SAMPLE_RATE}×; that keeps the real timing but adds no detail above {ECG_SAMPLE_RATE / 2} Hz. Every non-normal label scoring at least 80% appears in coach’s notes. Scores are independent, unvalidated model outputs requiring clinical context, not diagnoses or calibrated risk estimates.</p>
+	<p class="mt-6 max-w-[70ch] text-[14px] leading-relaxed text-muted">ECG assumes lead I at {ECG_SAMPLE_RATE.toLocaleString('en-GB')} Hz ({ECG_SAMPLES / ECG_SAMPLE_RATE} seconds for {samples} samples). The database doesn’t store lead or sampling-rate metadata. The model expects {ECG_MODEL_RATE} Hz input, so this browser applies an anti-alias filter and downsamples by {ECG_SAMPLE_RATE / ECG_MODEL_RATE}. Capture timing is checked; lead placement and sensor-specific accuracy remain unverified. Every non-normal label scoring at least 80% appears in coach’s notes. Scores are independent, unvalidated model outputs requiring clinical context, not diagnoses or calibrated risk estimates.</p>
 	<details class="mt-2 max-w-[70ch] text-[14px] leading-relaxed text-muted">
 		<summary class="label flex min-h-11 items-center text-white">How the ECG is prepared</summary>
-		<p>The latest database EKG values, including missing samples, are read in record order. Analysis requires {samples} finite values. Missing samples are never padded or filled in.</p>
-		<p class="mt-2">Raw ECG is filtered at {ECG_SAMPLE_RATE} Hz with a 50 Hz notch (Q = 30), a fourth-order 0.67–40 Hz Butterworth bandpass, and a {ECG_BASELINE_SAMPLES}-sample median baseline removal, then standardized, upsampled {ECG_MODEL_RATE / ECG_SAMPLE_RATE}× to {ECG_MODEL_RATE} Hz with Lanczos (a = 4) interpolation, and standardized again. Sigmoid is applied to each of the 150 outputs.</p>
+		<p>The latest database EKG values, including missing samples, are read in record order. Analysis requires {samples} finite values with consecutive record IDs, increasing capture times, no gaps over 2.5 ms, and an average rate within 20% of 2,000 Hz. Missing samples are never padded or filled in.</p>
+		<p class="mt-2">Raw ECG is downsampled from {ECG_SAMPLE_RATE.toLocaleString('en-GB')} Hz to {ECG_MODEL_RATE} Hz using an 81-tap Kaiser anti-alias FIR filter (beta = 5, zero padding at the edges). At {ECG_MODEL_RATE} Hz it receives a 50 Hz notch (Q = 30), a fourth-order 0.67–40 Hz Butterworth bandpass, {ECG_BASELINE_SAMPLES}-sample median baseline removal, and standardization. Sigmoid is applied to each of the 150 outputs.</p>
 		<a class="mt-2 inline-flex min-h-11 items-center text-lime underline underline-offset-2" href={asset('models/ecgfounder/LICENSE')} download>ECGFounder MIT license</a>
 	</details>
 </section>

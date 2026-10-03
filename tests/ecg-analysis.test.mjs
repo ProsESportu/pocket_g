@@ -72,8 +72,8 @@ test('all ECG export scores retain model order, logits, input assumptions and or
 	const h = harness(); h.controller.analyze(window()); h.reply();
 	const report = JSON.parse(serializeEcgResult(h.complete[0]));
 	assert.equal(report.firstRecordId, 6001 - ECG_SAMPLES); assert.equal(report.lastRecordId, 6000);
-	assert.equal(report.assumedSampleRate, 125); assert.equal(report.samples, ECG_SAMPLES);
-	assert.equal(report.modelSamples, 5000); assert.match(report.resampling, /125 Hz to 500 Hz/);
+	assert.equal(report.assumedSampleRate, 2000); assert.equal(report.samples, ECG_SAMPLES);
+	assert.equal(report.modelSamples, 5000); assert.match(report.resampling, /2000 Hz to 500 Hz/);
 	assert.equal(report.assumedLead, 'I'); assert.equal(report.source, 'public.ekgemgpuls.ekg');
 	assert.deepEqual(report.scores, h.complete[0].scores); assert.match(report.validation, /Unvalidated.*500 Hz/);
 });

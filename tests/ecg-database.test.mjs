@@ -4,7 +4,7 @@ import { ECG_SAMPLES } from '../src/lib/ecg.ts';
 import { databaseEcgWindow } from '../src/lib/ecg-database.ts';
 import { loadDatabaseEcg } from '../src/lib/ecg-readings.ts';
 
-const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, created_at: new Date(i * 2).toISOString(), ekg: Math.sin(i / 100) }));
+const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, created_at: new Date(Math.floor(i / 2)).toISOString().replace(/\d{3}Z$/, `${String((i % 2000) * 500).padStart(6, '0')}Z`), ekg: Math.sin(i / 100) }));
 
 test('selects exactly the latest 10 seconds of ECG values, oldest to newest, without mutation', () => {
     const readings = rows(ECG_SAMPLES + 1000).reverse();
@@ -51,15 +51,15 @@ function databaseMock(readings, cap = 1000) {
 }
 
 test('pages past Supabase row limits and keeps the initial snapshot boundary', async () => {
-    const { fetcher, urls } = databaseMock(rows(6100), 600);
-    const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 6000);
+    const { fetcher, urls } = databaseMock(rows(30100), 600);
+    const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 30000);
     assert.equal(window.error, '');
     assert.equal(window.samples.length, ECG_SAMPLES);
-    assert.equal(window.firstRecordId, 6001 - ECG_SAMPLES);
-    assert.equal(window.lastRecordId, 6000);
+    assert.equal(window.firstRecordId, 30001 - ECG_SAMPLES);
+    assert.equal(window.lastRecordId, 30000);
     assert.equal(urls.length, Math.ceil(ECG_SAMPLES / 600));
-    assert.equal(urls[0].searchParams.get('id'), 'lte.6000');
-    assert.equal(urls[1].searchParams.get('id'), 'lt.5401');
+    assert.equal(urls[0].searchParams.get('id'), 'lte.30000');
+    assert.equal(urls[1].searchParams.get('id'), 'lt.29401');
 });
 
 test('counts all available values when the database has fewer than 10 seconds of ECG', async () => {
@@ -72,32 +72,32 @@ test('counts all available values when the database has fewer than 10 seconds of
 });
 
 test('never falls back to an old ECG recording when the newest rows have no ECG value', async () => {
-    const readings = rows(12000);
-    for (const row of readings.slice(6000)) row.ekg = null;
+    const readings = rows(40000);
+    for (const row of readings.slice(20000)) row.ekg = null;
     const { fetcher } = databaseMock(readings);
-    const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 12000);
+    const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 40000);
     assert.deepEqual(window.samples, []);
     assert.equal(window.available, 0);
     assert.equal(window.rowCount, ECG_SAMPLES);
-    assert.equal(window.firstRecordId, 12001 - ECG_SAMPLES);
-    assert.equal(window.lastRecordId, 12000);
+    assert.equal(window.firstRecordId, 40001 - ECG_SAMPLES);
+    assert.equal(window.lastRecordId, 40000);
 });
 
 test('a missing value in the newest ECG window is not replaced with an older sample', async () => {
-    const readings = rows(6000);
-    readings[5500].ekg = null;
+    const readings = rows(30000);
+    readings[29500].ekg = null;
     const { fetcher } = databaseMock(readings, 600);
-    const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 6000);
+    const window = await loadDatabaseEcg(fetcher, 'https://example.supabase.co', 'test-publishable-key', 30000);
     assert.equal(window.available, ECG_SAMPLES - 1);
-    assert.equal(window.firstRecordId, 6001 - ECG_SAMPLES);
-    assert.equal(window.lastRecordId, 6000);
+    assert.equal(window.firstRecordId, 30001 - ECG_SAMPLES);
+    assert.equal(window.lastRecordId, 30000);
     assert.deepEqual(window.samples, []);
 });
 
 test('failed database fetches discard partial inputs and distinguish errors from insufficient data', async () => {
-    const { fetcher } = databaseMock(rows(6000));
+    const { fetcher } = databaseMock(rows(30000));
     let calls = 0;
-    const window = await loadDatabaseEcg((...args) => ++calls === 2 ? Promise.resolve(new Response('', { status: 503 })) : fetcher(...args), 'https://example.supabase.co', 'test-publishable-key', 6000);
+    const window = await loadDatabaseEcg((...args) => ++calls === 2 ? Promise.resolve(new Response('', { status: 503 })) : fetcher(...args), 'https://example.supabase.co', 'test-publishable-key', 30000);
     assert.match(window.error, /HTTP 503/);
     assert.deepEqual(window.samples, []);
     const repeated = await loadDatabaseEcg(() => Promise.resolve(Response.json(rows(2).reverse())), 'https://example.supabase.co', '', 2);

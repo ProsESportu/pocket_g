@@ -3,7 +3,7 @@ import { captureMilliseconds } from './capture-time.ts';
 
 // Initial engineering defaults for a positive-going pulse waveform.
 export const PULSE = {
-	minSampleRate: 10, maxSampleRate: 1000, windowSeconds: 10, minSeconds: 5,
+	minSampleRate: 10, maxSampleRate: 2000, windowSeconds: 10, minSeconds: 5,
 	smoothingSeconds: 0.04, baselineSeconds: 1.5, prominenceFraction: 0.2,
 	minPeakSeconds: 0.25, minBeats: 3, minBpm: 30, maxBpm: 240, maxIntervalMad: 0.3
 } as const;
@@ -26,7 +26,7 @@ export function pulseConfiguration(value: string | null): PulseResult {
 	const valid = sampleRate !== null && validPulseRate(sampleRate);
 	return {
 		status: value === null ? 'unset' : 'unavailable',
-		reason: value === null ? 'Enter the sensor sampling rate to calculate pulse frequency.' : valid ? 'Not enough continuous pulse data.' : 'Sampling rate must be a number from 10 to 1,000 Hz.',
+		reason: value === null ? 'Enter the sensor sampling rate to calculate pulse frequency.' : valid ? 'Not enough continuous pulse data.' : 'Sampling rate must be a number from 10 to 2,000 Hz.',
 		bpm: null, hz: null, sampleRate: valid ? sampleRate : null,
 		duration: 0, beatCount: 0, firstRecordId: null, lastRecordId: null,
 		timing: 'timestamps', timestampsInvalid: false, timingReason: '', rates: []

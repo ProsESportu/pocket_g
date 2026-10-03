@@ -4,7 +4,7 @@ export async function loadDatabasePulse(fetcher: typeof fetch, baseUrl: string, 
 	if (throughId === undefined) return estimatePulseWithTiming([], configuration);
 	let limit = PULSE.maxSampleRate * PULSE.windowSeconds + 1;
 	const rows: PulseReading[] = [];
-	const signal = AbortSignal.timeout(10000);
+	const signal = AbortSignal.timeout(30000);
 	let beforeId: number | undefined;
 	try {
 		while (rows.length < limit) {

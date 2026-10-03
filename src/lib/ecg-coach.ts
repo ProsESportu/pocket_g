@@ -14,6 +14,6 @@ export function ecgCoachNotes(result: EcgResult | null, readings: Reading[], sta
 		.sort((a, b) => b.score - a.score || a.index - b.index).map((row) => ({
 			id: `ecg-${row.index}`, kind: 'try', channel: 'ekg', from: window.startedAt, to: window.endedAt,
 			...(overlap.length ? { fromId: overlap[0].id, toId: overlap.at(-1)!.id } : {}),
-			text: `${stale ? 'Stale snapshot. ' : ''}ECG model output: ${row.label} — score ${(row.score * 100).toFixed(2)}%, records ${window.firstRecordId}–${window.lastRecordId}. Unvalidated at 125 Hz; requires clinical context. Labels may be fragments or comparison statements; no previous recording was compared by this app.`
+			text: `${stale ? 'Stale snapshot. ' : ''}ECG model output: ${row.label} — score ${(row.score * 100).toFixed(2)}%, records ${window.firstRecordId}–${window.lastRecordId}. Unvalidated for this sensor; requires clinical context. Labels may be fragments or comparison statements; no previous recording was compared by this app.`
 		}));
 }

@@ -34,7 +34,7 @@ self.onmessage = async (event: MessageEvent<EmgInferenceRequest>) => {
 	const post = (message: EmgInferenceMessage) => self.postMessage(message);
 	try {
 		if (!Array.isArray(request.samples) || request.samples.length < EMG.minSamples || request.samples.length > EMG.maxSamples) {
-			throw new Error('EMG analysis requires 10–60 seconds of samples at 125 Hz.');
+			throw new Error('EMG analysis requires 10–60 seconds of samples at 2,000 Hz.');
 		}
 		post({ requestId: request.requestId, type: 'status', text: 'Filtering EMG and detecting repetitions…' });
 		const { metadata, profile } = await loadConfiguration(request);

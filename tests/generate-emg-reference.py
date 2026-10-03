@@ -1,33 +1,21 @@
-"""Generate the experimental 125 Hz profile and independent SciPy DSP references.
+"""Generate the upstream 2,000 Hz profile and independent SciPy DSP references.
 
 Requires NumPy and SciPy only. No model training or upstream asset changes.
 """
 import json
 from pathlib import Path
 import numpy as np
-from scipy.signal import butter, iirnotch, lfilter_zi, filtfilt, find_peaks, welch
+from scipy.signal import filtfilt, find_peaks, welch
 
 ROOT = Path(__file__).resolve().parents[1]
-FS = 125
+FS = 2000
 
 
-def pack(pair):
-    b, a = pair
-    return {"b": b.tolist(), "a": a.tolist(), "zi": lfilter_zi(b, a).tolist()}
-
-
+metadata = json.loads((ROOT / "static/models/emg-fatigue/metadata.json").read_text())
 profile = {
-    "id": "experimental-125hz", "experimental": True, "sample_rate": FS,
-    "preprocessing": {
-        "lowcut_hz": 20, "highcut_hz": 55, "notch_hz": 50, "notch_quality": 30,
-        "envelope_hz": 5, "distance_seconds": 2, "prominence": .2,
-        "baseline_reps": 3, "rep_duration_unit": "samples",
-    },
-    "filters": {
-        "bandpass": pack(butter(4, [20, 55], btype="bandpass", fs=FS)),
-        "notch": pack(iirnotch(50, 30, FS)),
-        "envelope": pack(butter(4, 5, fs=FS)),
-    },
+    "id": "upstream-2000hz", "experimental": True, "sample_rate": FS,
+    "preprocessing": metadata["preprocessing"],
+    "filters": metadata["filters"][str(FS)],
 }
 
 
@@ -71,7 +59,7 @@ for name, centers, duration in [("four-reps", [1, 4, 7, 10], 12.5), ("long-welch
                                 ("two-reps", [2, 7], 10), ("flat", [], 10)]:
     time = np.arange(int(FS * duration)) / FS
     envelope = sum(np.exp(-((time-c)/.45)**2) * (.7 + .1*i) for i, c in enumerate(centers))
-    samples = envelope * (np.sin(2*np.pi*31*time) + .3*np.cos(2*np.pi*43*time))
+    samples = envelope * (np.sin(2*np.pi*180*time) + .3*np.cos(2*np.pi*310*time))
     if centers:
         samples += .001*np.sin(2*np.pi*50*time)
     else:
@@ -81,11 +69,11 @@ for name, centers, duration in [("four-reps", [1, 4, 7, 10], 12.5), ("long-welch
 mdf = []
 for count in [1, 27, 777, 1023, 1024, 2049]:
     time = np.arange(count) / FS
-    samples = np.sin(2*np.pi*31*time) + .7*np.sin(2*np.pi*43*time)
+    samples = np.sin(2*np.pi*180*time) + .7*np.sin(2*np.pi*310*time)
     f, power = welch(samples, fs=FS, nperseg=min(1024, count))
     expected = float(f[np.searchsorted(np.cumsum(power), power.sum()/2)]) if power.sum() else 0.
     mdf.append({"samples": samples.tolist(), "expected": expected})
 
-(ROOT / "static/models/emg-fatigue/experimental-125hz.json").write_text(json.dumps(profile, indent=2) + "\n")
+(ROOT / "static/models/emg-fatigue/upstream-2000hz.json").write_text(json.dumps(profile, indent=2) + "\n")
 (ROOT / "tests/fixtures/emg-preprocessing.json").write_text(json.dumps({"fs": FS, "signals": signals, "mdf": mdf}) + "\n")
 print(f"Generated profile, {len(signals)} signal references and {len(mdf)} Welch references")

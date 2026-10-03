@@ -32,7 +32,7 @@
 		event.preventDefault();
 		const rate = rateInput;
 		if (rate === undefined || !validPulseRate(rate)) {
-			inputError = 'Enter a sampling rate from 10 to 1,000 Hz.';
+			inputError = 'Enter a sampling rate from 10 to 2,000 Hz.';
 			return;
 		}
 		applying = true;
@@ -73,7 +73,7 @@
 			<p class="mb-3 flex gap-2 text-[15px] leading-relaxed"><TriangleAlert class="mt-0.5 shrink-0 text-lime" size={18} />{result.timingReason || display.result.timingReason} Use the sensor’s sampling rate instead.</p>
 			<label for={`${uid}-rate`} class="label block text-muted">Sampling rate (Hz)</label>
 			<div class="mt-2 flex gap-2">
-				<input id={`${uid}-rate`} class="min-h-11 w-full min-w-0 border border-white/45 bg-night px-3 text-[16px] text-white tabular-nums" name="pulseSampleRate" type="number" min="10" max="1000" step="any" required bind:value={rateInput} aria-describedby={`${uid}-help ${uid}-input-error`} aria-invalid={!!inputError} disabled={applying} />
+				<input id={`${uid}-rate`} class="min-h-11 w-full min-w-0 border border-white/45 bg-night px-3 text-[16px] text-white tabular-nums" name="pulseSampleRate" type="number" min="10" max="2000" step="any" required bind:value={rateInput} aria-describedby={`${uid}-help ${uid}-input-error`} aria-invalid={!!inputError} disabled={applying} />
 				<button class="btn btn-lime" type="submit" disabled={applying || refreshing}>{applying ? 'Applying…' : 'Apply'}</button>
 			</div>
 			<p id={`${uid}-input-error`} class="mt-2 text-[14px] text-lime" role="alert">{inputError}</p>

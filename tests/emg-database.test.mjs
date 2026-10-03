@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { databaseEmgWindow, loadDatabaseEmg } from '../src/lib/emg-readings.ts';
 
-const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, created_at: new Date(i * 8).toISOString(), emg: Math.sin(i) }));
+const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, created_at: new Date(Math.floor(i / 2)).toISOString().replace(/\d{3}Z$/, `${String((i % 2000) * 500).padStart(6, '0')}Z`), emg: Math.sin(i) }));
 function mock(readings, cap = 1000) {
     const urls = [];
     const fetcher = async (input, options) => {
@@ -19,18 +19,18 @@ function mock(readings, cap = 1000) {
 }
 
 test('EMG pages through reduced API caps and fixes the snapshot despite newer inserts', async () => {
-    const input = rows(10100);
+    const input = rows(130100);
     const { fetcher, urls } = mock(input, 600);
-    const window = await loadDatabaseEmg(fetcher, 'https://example.supabase.co', 'public-key', 10000);
-    assert.equal(window.samples.length, 7500);
-    assert.equal(window.firstRecordId, 2501);
-    assert.equal(window.lastRecordId, 10000);
+    const window = await loadDatabaseEmg(fetcher, 'https://example.supabase.co', 'public-key', 130000);
+    assert.equal(window.samples.length, 120000);
+    assert.equal(window.firstRecordId, 10001);
+    assert.equal(window.lastRecordId, 130000);
     assert.equal(window.duration, 60);
     assert.equal(window.reason, '');
-    assert.equal(window.samples[0], Math.sin(2500));
-    assert.equal(urls[0].searchParams.get('id'), 'lte.10000');
-    assert.equal(urls.at(-1).searchParams.get('limit'), '300');
-    assert.equal(urls.length, 13);
+    assert.equal(window.samples[0], Math.sin(10000));
+    assert.equal(urls[0].searchParams.get('id'), 'lte.130000');
+    assert.equal(urls.at(-1).searchParams.get('limit'), '600');
+    assert.equal(urls.length, 200);
 });
 
 test('EMG stops at null/nonfinite values and never skips a missing newest sample', () => {
@@ -44,13 +44,13 @@ test('EMG stops at null/nonfinite values and never skips a missing newest sample
 });
 
 test('EMG selects the newest window regardless of input order without mutating readings', () => {
-    const input = rows(10000);
+    const input = rows(130000);
     const original = input.map((row) => row.id);
     for (const readings of [input, [...input].reverse()]) {
         const window = databaseEmgWindow(readings);
-        assert.equal(window.firstRecordId, 2501);
-        assert.equal(window.lastRecordId, 10000);
-        assert.equal(window.samples.length, 7500);
+        assert.equal(window.firstRecordId, 10001);
+        assert.equal(window.lastRecordId, 130000);
+        assert.equal(window.samples.length, 120000);
         assert.equal(window.samples.at(-1), input.at(-1).emg);
     }
     assert.deepEqual(input.map((row) => row.id), original);
@@ -73,10 +73,10 @@ test('EMG detects missing IDs, pauses and breaks crossing page boundaries', asyn
 });
 
 test('EMG permits 10 seconds and reports shorter/empty recordings without padding', async () => {
-    assert.equal(databaseEmgWindow(rows(1250).reverse()).reason, '');
-    const short = databaseEmgWindow(rows(1249).reverse());
+    assert.equal(databaseEmgWindow(rows(20000).reverse()).reason, '');
+    const short = databaseEmgWindow(rows(19999).reverse());
     assert.match(short.reason, /10 continuous seconds/);
-    assert.equal(short.samples.length, 1249);
+    assert.equal(short.samples.length, 19999);
     const empty = await loadDatabaseEmg(() => { throw new Error('Unexpected fetch'); }, '', '', undefined);
     assert.equal(empty.sampleCount, 0);
 });

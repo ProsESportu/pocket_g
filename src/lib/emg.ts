@@ -1,6 +1,6 @@
 import type { Reading } from './readings.ts';
 
-export const EMG = { sampleRate: 125, maxSamples: 7500, minSamples: 1250, minReps: 3, profile: 'experimental-125hz' } as const;
+export const EMG = { sampleRate: 2000, maxSamples: 120000, minSamples: 20000, minReps: 3, profile: 'upstream-2000hz' } as const;
 export const EMG_FEATURES = [
 	'rep', 'start', 'end', 'peak_idx', 'peak_time', 'rms', 'mdf', 'env_peak', 'rep_duration',
 	'rms_rel_base', 'rms_delta_base', 'mdf_rel_base', 'mdf_delta_base', 'env_peak_rel_base',
@@ -62,8 +62,8 @@ export function emgResult(window: EmgWindowInfo, update: Partial<EmgResult> = {}
 export function serializeEmgResult(result: EmgResult): string {
 	return JSON.stringify({
 		model: 'EMG fatigue standardized logistic regression', source: 'public.ekgemgpuls.emg',
-		validation: 'Experimental preprocessing at 125 Hz; fatigue predictions are unvalidated at this rate.',
-		timing: 'Consecutive database rows are assumed uniformly spaced at 125 Hz. Window-relative repetition numbering and baseline.',
+		validation: 'Original 2,000 Hz preprocessing; fatigue predictions remain unvalidated for this sensor and exercise.',
+		timing: 'Consecutive database rows are assumed uniformly spaced at 2,000 Hz after capture timing and continuity checks. Window-relative repetition numbering and baseline.',
 		...result
 	}, null, 2);
 }

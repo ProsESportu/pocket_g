@@ -45,6 +45,7 @@ export class EcgAnalysisController {
 		const result: EcgResult = { status: 'unavailable', reason: '', scores: [], window: { ...info }, elapsedMs: 0, analyzedAt: '' };
 		const unavailable = (reason: string) => this.finish({ ...result, reason, analyzedAt: new Date().toISOString() });
 		if (error) { this.fail(new Error(error)); return; }
+		if (window.reason) { unavailable(window.reason); return; }
 		if (samples.length !== ECG_SAMPLES) {
 			unavailable(`Needs ${ECG_SAMPLES.toLocaleString('en-GB')} finite EKG samples (10 seconds). ${window.available.toLocaleString('en-GB')} so far.`);
 			return;
