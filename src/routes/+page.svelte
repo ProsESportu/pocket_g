@@ -22,6 +22,8 @@
 	let page = $state(0);
 	let selectedNote = $state<string | null>(null);
 	let emgResult = $state.raw<EmgResult | null>(null);
+	// Rows newer than this arrived in the latest refresh and flash once in the log.
+	let freshAfter = $state<number | null>(null);
 	const pageSize = 20;
 	let notes = $derived([...signalChecks(displayed.readings, displayed.pulse), ...emgCoachNote(emgResult, displayed.readings)]);
 	let filtered = $derived(displayed.readings.filter((row) => [row.id, row.created_at, row.ekg, row.emg, row.puls].join(' ').toLowerCase().includes(search.toLowerCase())));
@@ -30,6 +32,11 @@
 	let visible = $derived(filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize));
 	let failure = $derived(data.error || refreshError);
 	let status = $derived(failure ? 'Connection problem' : !autoRefresh ? 'Paused' : !pageVisible ? 'Paused while hidden' : 'Live');
+	// The Live dot beats at the measured heart rate; implausible estimates leave it still.
+	let beat = $derived.by(() => {
+		const bpm = data.pulse.status === 'ready' ? Math.round(data.pulse.bpm ?? 0) : 0;
+		return status === 'Live' && bpm >= 30 && bpm <= 220 ? `${(60 / bpm).toFixed(3)}s` : null;
+	});
 	const date = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
 	const time = (value: string) => new Intl.DateTimeFormat('en-GB', { timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
 	const cell = (value: number | null) => value === null || !Number.isFinite(value) ? null : new Intl.NumberFormat('en-GB', { maximumFractionDigits: 3 }).format(value);
@@ -49,9 +56,13 @@
 		if (refreshing) return;
 		refreshing = true;
 		refreshError = '';
+		const newest = displayed.readings[0]?.id ?? null;
 		try {
 			await invalidate('app:readings');
-			if (!data.error) lastSuccess = data;
+			if (!data.error) {
+				lastSuccess = data;
+				freshAfter = newest;
+			}
 		}
 		catch { refreshError = 'Refresh failed.'; }
 		finally { refreshing = false; }
@@ -73,7 +84,7 @@
 		<a href="/" class="display inline-flex min-h-11 items-center text-[20px]">Pocket&nbsp;<span class="text-lime">G</span></a>
 		<div class="flex items-center gap-2 md:gap-3">
 			<p class="label mr-1 flex items-center gap-2 text-muted">
-				<svg class="size-2.5 shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+				<svg class={['size-2.5 shrink-0', beat && 'beat']} style:--beat={beat} viewBox="0 0 10 10" aria-hidden="true">
 					{#if failure}<path d="M5 0.5 9.8 9.5H0.2Z" fill="var(--color-lime)" />
 					{:else if status === 'Live'}<circle cx="5" cy="5" r="4" fill="var(--color-lime)" />
 					{:else}<circle cx="5" cy="5" r="3.5" fill="none" stroke="currentColor" stroke-width="1.5" />{/if}
@@ -97,23 +108,24 @@
 <section class="relative grid overflow-hidden border-b border-rule lg:grid-cols-[minmax(2rem,1fr)_minmax(0,736px)_minmax(0,480px)_minmax(2rem,1fr)]" aria-labelledby="page-title">
 	<div class="relative z-10 px-4 pt-10 pb-14 md:px-8 md:pt-14 lg:col-start-2 lg:px-0 lg:pr-8 lg:pb-20">
 		<h1 id="page-title" class="display text-[clamp(48px,7vw,96px)]">
-			<span class="block text-[0.55em]">Live</span>
-			<span aria-hidden="true" class="outline-text block">Session</span>
-			<span aria-hidden="true" class="outline-text -mt-[0.08em] block">Session</span>
-			<span class="-mt-[0.08em] block text-lime">Session</span>
+			<span class="rise block text-[0.55em]" style:--i={0}>Live</span>
+			<!-- Outer spans drift with scroll, inner spans rise on load, so the two animations never compete. -->
+			<span aria-hidden="true" class="drift block" style:--drift="-0.6em" style:--fade={0.2}><span class="rise outline-text block" style:--i={1}>Session</span></span>
+			<span aria-hidden="true" class="drift -mt-[0.08em] block" style:--drift="-0.3em" style:--fade={0.5}><span class="rise outline-text block" style:--i={2}>Session</span></span>
+			<span class="rise -mt-[0.08em] block text-lime" style:--i={3.5}>Session</span>
 		</h1>
 		<p class="mt-6 max-w-[52ch] text-[16px] leading-relaxed text-muted">{displayed.readings.length ? `Your last ${displayed.readings.length} readings in Warsaw time. Each trace has its own scale, so compare a signal with itself rather than with the others.` : 'Your EKG, EMG and pulse appear here as readings arrive, in Warsaw time.'}</p>
 	</div>
 	<div class="hero-panel relative bg-panel lg:col-span-2 lg:col-start-3">
-		<svg class="absolute inset-0 hidden h-full w-full lg:block" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="16" y1="0" x2="0" y2="100" stroke="var(--color-lime)" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>
+		<svg class="edge-line absolute inset-0 hidden h-full w-full lg:block" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="16" y1="0" x2="0" y2="100" stroke="var(--color-lime)" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>
 		<div aria-hidden="true" class="display pointer-events-none absolute right-0 bottom-5 left-0 hidden overflow-hidden text-[88px] leading-none whitespace-nowrap md:block">
-			<span class="outline-text block pl-[10%] [--stroke:var(--color-lime)]">Pulse Pulse Pulse</span>
+			<span class="pulse-band outline-text block pl-[10%] [--stroke:var(--color-lime)]">Pulse Pulse Pulse</span>
 		</div>
 		<div class="relative z-10 px-4 pt-12 pb-14 md:px-8 md:pb-[136px] lg:max-w-[min(100%,560px)] lg:pt-14 lg:pr-8 lg:pl-[22%]">
 			<PulseFrequency result={data.pulse} refreshError={failure} {refreshing} />
 		</div>
 	</div>
-	<span aria-hidden="true" class="wedge bottom-0 left-0 z-10 h-3 w-[42%] max-w-[460px]"></span>
+	<span aria-hidden="true" class="hero-wedge wedge bottom-0 left-0 z-10 h-3 w-[42%] max-w-[460px]"></span>
 </section>
 
 <main class="mx-auto max-w-[1280px] px-4 pt-12 pb-12 md:px-8 md:pt-16">
@@ -166,7 +178,7 @@
 					</thead>
 					<tbody>
 						{#each visible as row (row.id)}
-							<tr class="border-b border-rule">
+							<tr class={['border-b border-rule', freshAfter !== null && row.id > freshAfter && 'fresh']}>
 								<td class="py-3 pr-3 sm:pr-6 text-muted">{row.id}</td>
 								<td class="py-3 pr-3 sm:pr-6"><span class="sm:hidden">{time(row.created_at)}</span><span class="hidden sm:inline">{date(row.created_at)}</span></td>
 								<td class="py-3 pr-3 sm:pr-6 text-right font-semibold">{@render value(row.ekg)}</td>
@@ -205,4 +217,48 @@
 	/* Diagonal left edge on wide screens, a slanted top edge when stacked. */
 	.hero-panel { clip-path: polygon(0 28px, 100% 0, 100% 100%, 0 100%); }
 	@media (min-width: 1024px) { .hero-panel { clip-path: polygon(16% 0, 100% 0, 100% 100%, 0 100%); } }
+
+	/* Page-load sequence, CSS only so it plays before hydration: the title stack rises line by line with the
+	   lime word landing last, the heart-rate panel sweeps in from the right, then the lime edge and wedge land. */
+	@media (prefers-reduced-motion: no-preference) {
+		.rise { animation: rise 750ms var(--ease-out-expo) calc(var(--i) * 90ms) backwards; }
+		.hero-panel { animation: panel-in 900ms var(--ease-out-expo) 150ms backwards; }
+		.edge-line { animation: draw-down 500ms var(--ease-out-expo) 750ms backwards; }
+		.hero-wedge { transform-origin: left; animation: slice 700ms var(--ease-out-expo) 550ms backwards; }
+		.beat { animation: beat var(--beat) ease-out infinite; }
+	}
+	@media (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
+		.hero-panel { animation-name: panel-in-wide; }
+	}
+	/* Scroll-linked: the outlined echoes trail upward as the title leaves, and the PULSE band slides sideways.
+	   Browsers without scroll-driven animations keep both still. */
+	@supports (animation-timeline: scroll()) {
+		@media (prefers-reduced-motion: no-preference) {
+			.drift, .pulse-band { animation-name: drift; animation-timing-function: linear; animation-fill-mode: both; animation-timeline: scroll(root); animation-range: 0 60vh; }
+			.pulse-band { --drift-x: -40%; animation-range: 0 100vh; }
+		}
+	}
+	.fresh { animation: fresh 1600ms ease-out; }
+
+	/* Text rises from behind its own bottom edge: the clip shrinks as fast as the line moves up. */
+	@keyframes rise {
+		from { translate: 0 100%; clip-path: inset(0 -0.25em 100% -0.25em); }
+		to { translate: 0 0; clip-path: inset(-0.25em); }
+	}
+	@keyframes panel-in { from { clip-path: polygon(100% 28px, 100% 0, 100% 100%, 100% 100%); } }
+	@keyframes panel-in-wide { from { clip-path: polygon(100% 0, 100% 0, 100% 100%, 84% 100%); } }
+	@keyframes draw-down {
+		from { clip-path: inset(0 0 100% 0); }
+		to { clip-path: inset(0); }
+	}
+	@keyframes slice { from { scale: 0 1; } }
+	@keyframes drift { to { transform: translate(var(--drift-x, 0), var(--drift, 0)); opacity: var(--fade, 1); } }
+	/* Lub-dub: a strong beat, a softer echo, then rest for the remainder of the interval. */
+	@keyframes beat {
+		0%, 50%, 100% { scale: 1; }
+		12% { scale: 1.5; }
+		24% { scale: 1; }
+		36% { scale: 1.25; }
+	}
+	@keyframes fresh { from { background-color: color-mix(in srgb, var(--color-lime) 22%, transparent); } }
 </style>

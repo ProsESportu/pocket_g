@@ -2,6 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { untrack } from 'svelte';
+	import { cubicOut } from 'svelte/easing';
+	import { Tween, prefersReducedMotion } from 'svelte/motion';
 	import { TriangleAlert } from '@lucide/svelte';
 	import { pulseDisplay, validPulseRate, type PulseResult } from './pulse';
 	let { result, refreshError = '', refreshing = false }: { result: PulseResult; refreshError?: string; refreshing?: boolean } = $props();
@@ -16,6 +18,8 @@
 	let ownFailure = $derived(display.failure && display.failure !== refreshError ? display.failure : '');
 	let outage = $derived(!!refreshError && !display.stale);
 	let timing = $derived(display.result.timing === 'timestamps' ? 'capture timestamps' : `a ${display.result.sampleRate ?? 'missing'} Hz sampling rate`);
+	// Rolls to each new estimate, so a change between refreshes is visible.
+	const bpm = Tween.of(() => display.result.bpm ?? 0, { duration: () => (prefersReducedMotion.current ? 0 : 600), easing: cubicOut });
 	const uid = $props.id();
 
 	// Keeps the last good estimate across failed refreshes, so it needs history a $derived can't hold.
@@ -47,7 +51,7 @@
 	<div>
 		{#if display.result.status === 'ready'}
 			<p class="mt-2 flex items-baseline gap-3 leading-none">
-				<span class="text-[clamp(72px,11vw,128px)] [font-weight:850] [font-stretch:112%] tracking-[-0.02em]">{Math.round(display.result.bpm!)}</span>
+				<span class="text-[clamp(72px,11vw,128px)] [font-weight:850] [font-stretch:112%] tracking-[-0.02em] tabular-nums">{Math.round(bpm.current)}</span>
 				<span class="display text-[22px] text-lime">BPM</span>
 			</p>
 			<p class="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-muted">{display.result.hz!.toFixed(2)} Hz from {display.result.beatCount} beats over {display.result.duration.toFixed(1)} seconds, timed by {timing}. Records {display.result.firstRecordId}–{display.result.lastRecordId}.</p>

@@ -95,7 +95,7 @@
 	{:else if !ready}
 		<div class="mt-6" role="status">
 			<p class="text-[17px] font-semibold">Needs 5,000 EKG samples. {window.available.toLocaleString('en-GB')} so far.</p>
-			<div class="mt-3 h-2 max-w-md overflow-hidden bg-raised" aria-hidden="true"><div class="h-full bg-lime" style:width={`${Math.min(window.available / ECG_SAMPLES, 1) * 100}%`}></div></div>
+			<div class="mt-3 h-2 max-w-md overflow-hidden bg-raised" aria-hidden="true"><div class="h-full bg-lime transition-[width] duration-500 ease-out" style:width={`${Math.min(window.available / ECG_SAMPLES, 1) * 100}%`}></div></div>
 			<p class="mt-2 text-[14px] text-muted">New readings are counted on every refresh.</p>
 		</div>
 	{:else}
@@ -121,11 +121,11 @@
 			{#if newerData}<p class="mt-4 text-[15px] leading-relaxed">Newer samples are available. Analyze ECG again to update these scores.</p>{/if}
 			<label class="label mt-6 block max-w-sm text-muted">Find a label <input class="mt-2 block min-h-11 w-full border border-white/45 bg-night px-3 text-[16px] font-normal tracking-normal text-white normal-case placeholder:text-muted" type="search" placeholder="Search 150 labels" bind:value={search} /></label>
 			<ol class="mt-4">
-				{#each visible as row (row.index)}
+				{#each visible as row, rank (row.index)}
 					<li class="grid gap-2 border-b border-rule py-3 text-[15px] sm:grid-cols-[minmax(0,1fr)_15rem] sm:items-center sm:gap-6">
 						<span class="[overflow-wrap:anywhere]">{row.label}</span>
 						<span class="flex items-center gap-3">
-							<span aria-hidden="true" class="h-2 flex-1 overflow-hidden bg-raised"><span class="block h-full bg-lime" style:width={`${row.score * 100}%`}></span></span>
+							<span aria-hidden="true" class="h-2 flex-1 overflow-hidden bg-raised"><span class="grow-bar block h-full bg-lime" style:width={`${row.score * 100}%`} style:--rank={rank}></span></span>
 							<strong class="w-16 text-right font-bold tabular-nums">{(row.score * 100).toFixed(2)}%</strong>
 						</span>
 					</li>
@@ -143,3 +143,11 @@
 		<a class="mt-2 inline-flex min-h-11 items-center text-lime underline underline-offset-2" href={asset('models/ecgfounder/LICENSE')} download>ECGFounder MIT license</a>
 	</details>
 </section>
+
+<style>
+	/* Score bars grow from the left when results arrive, top ranks first. */
+	@media (prefers-reduced-motion: no-preference) {
+		.grow-bar { transform-origin: left; animation: grow 700ms var(--ease-out-expo) calc(min(var(--rank), 10) * 40ms) backwards; }
+	}
+	@keyframes grow { from { scale: 0 1; } }
+</style>
