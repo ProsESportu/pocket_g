@@ -3,6 +3,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Search, TriangleAlert } from '@lucide/svelte';
 	import SessionStrip from '#lib/SessionStrip.svelte';
+	import GyroEnergy from '#lib/GyroEnergy.svelte';
 	import CoachNotes from '#lib/CoachNotes.svelte';
 	import EcgAnalysis from '#lib/EcgAnalysis.svelte';
 	import EmgAnalysis from '#lib/EmgAnalysis.svelte';
@@ -30,6 +31,7 @@
 	let emgStale = $derived(emgState.busy || !!emgState.error || (emgResult?.window.lastRecordId != null && displayed.readings[0]?.id !== emgResult.window.lastRecordId));
 	let ecgStale = $derived(ecgState.busy || !!ecgState.error || !!displayed.ecg.error || (!!ecgResult && (ecgResult.window.firstRecordId !== displayed.ecg.firstRecordId || ecgResult.window.lastRecordId !== displayed.ecg.lastRecordId || ecgResult.window.available !== displayed.ecg.available || ecgResult.window.rowCount !== displayed.ecg.rowCount)));
 	let manualRequest = $state(0);
+	let gyroRefreshRequest = $state.raw({ sequence: 0, manual: false });
 	let requestedPass = false;
 	// Rows newer than this arrived in the latest refresh and flash once in the log.
 	let freshAfter = $state<number | null>(null);
@@ -64,7 +66,7 @@
 		document.addEventListener('visibilitychange', updateVisibility);
 		const timer = window.setInterval(() => {
 			if (autoRefresh) void refresh();
-		}, 5000);
+		}, 1000);
 		return () => {
 			window.clearInterval(timer);
 			document.removeEventListener('visibilitychange', updateVisibility);
@@ -76,6 +78,8 @@
 	}
 	async function refresh(manual = false) {
 		if (manual) requestedPass = true;
+		// Gyro loading follows every refresh request, even while the physiological loader is busy or fails.
+		gyroRefreshRequest = { sequence: gyroRefreshRequest.sequence + 1, manual };
 		if (refreshing) return;
 		refreshing = true;
 		refreshError = '';
@@ -167,6 +171,9 @@
 		</section>
 		<div class="min-w-0 lg:col-span-4 lg:row-span-4">
 			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />
+		</div>
+		<div class="min-w-0 lg:col-span-8">
+			<GyroEnergy monitoring={autoRefresh} refreshRequest={gyroRefreshRequest} />
 		</div>
 		<!-- <section class="min-w-0 lg:col-span-8" aria-labelledby="pulse-frequency-title">
 			<h2 id="pulse-frequency-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Pulse</span> <span class="outline-text">frequency</span></h2>

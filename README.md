@@ -52,6 +52,44 @@ reapply it to this project.
 Validate with `npm test`, `npm run check`, and `npm run build`. The chart-data
 tests use Node.js's built-in TypeScript stripping (Node.js 22.18+).
 
+## Gyro movement energy
+
+The movement energy section reads `public.readings` independently of the EKG,
+EMG, and pulse loaders. Gyro axes are confirmed to be in **radians per second**;
+there is no raw-count or degrees/s conversion. Enter the mass moved in kg and
+apply settings. The pivot toggle defaults to **Elbow — 35 cm** and also offers
+**Shoulder — 65 cm** (30 cm upper arm plus 35 cm elbow-to-load). Both distances
+can be overridden under Calculation settings. Switching pivots immediately
+recalculates the entire session without clearing its samples or changing mass.
+
+The estimate treats the load as a point mass moving in a circle with the gyro
+rotating around the selected pivot: `K = 0.5 * mass * distance² * |gyro|²`.
+Each gyro axis uses a causal exponential filter with a 0.25 s time constant and
+actual `created_at` spacing; magnitudes below 0.05 rad/s count as rest. Positive
+kinetic work is the sum of `max(0, K_next - K_previous)`, not a sum or time
+integral of kinetic energy. Missing/nonfinite samples, invalid/repeated/backward
+timestamps, ID gaps, and capture pauses over two seconds break segments. The
+first sample in each segment sets the baseline and contributes no work.
+Gravitational work and metabolic expenditure are excluded. These distance,
+filter, and rest defaults are engineering assumptions, not calibrated measures
+of exercise energy expenditure; noise above the threshold can still add work.
+
+Initial loading includes all existing rows. Ascending-ID requests page in
+batches of up to 1,000 under a fixed latest-ID boundary and a shared 30 s timeout,
+without a silent row cap. Later refreshes load only rows after the committed
+boundary. The panel follows the current dashboard refresh cadence (one second),
+Pause/Resume, and manual Refresh now, including when physiological requests fail.
+Incomplete loads never commit; errors preserve the last snapshot as stale.
+
+**Reset energy session** fetches the current latest gyro ID, excludes readings
+through that boundary, and clears the total in this tab. It issues only GET
+requests and never deletes database rows. A failed reset preserves the session.
+Settings, selected pivot, both distances, and reset boundary are stored in
+`sessionStorage`; reloads re-fetch the same session's rows, while a new tab
+starts with existing history. Blocked browser storage is reported explicitly.
+Navigation aborts loading, and reset invalidates in-flight refreshes. Database
+access permissions are unchanged by this feature.
+
 ## Continuous monitoring and coach’s notes
 
 ECG runs only when **Analyze ECG** is pressed, on the 10-second window shown at
