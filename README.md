@@ -47,7 +47,11 @@ appears only when timestamps are missing, invalid, repeated, or run backwards
 within the current continuous recording. In that case, enter the sensor’s actual
 acquisition rate (10–1,000 Hz) and click **Apply**. The fallback rate is saved in
 the `pulseSampleRate` URL parameter; valid timestamps always take priority over
-that saved rate. Raw pulse values remain in the chart and table.
+that saved rate. The dedicated Pulse frequency panel below the session strip
+shows Hz prominently alongside BPM, beat count, duration, timing source, and
+record IDs. It follows live/manual refreshes and preserves the last successful
+estimate with a stale label after failures. Raw pulse values remain in the
+session strip and table.
 
 The browser reads the latest ten seconds through paginated, snapshot-bounded
 read-only requests, capped at 10,001 rows. Calculation uses the newest continuous

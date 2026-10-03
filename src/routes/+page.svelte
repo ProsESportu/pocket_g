@@ -123,15 +123,21 @@
 			<p>{failure} {lastSuccess ? `Showing readings from ${time(lastSuccess.loadedAt)}.` : ''} {autoRefresh ? 'Retrying every 5 seconds.' : 'Refresh now, or resume live updates to retry.'}</p>
 		</div>
 	{/if}
-	<!-- Keep coach notes alongside the strip and both analysis panels. -->
+	<!-- Keep coach notes alongside the strip, pulse frequency, and both analysis panels. -->
 	<div class="grid items-start gap-x-8 gap-y-14 lg:grid-cols-12">
 		<section class="min-w-0 lg:col-span-8" aria-labelledby="signals-title">
 			<h2 id="signals-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Your</span> <span class="outline-text">signals</span></h2>
 			<SessionStrip readings={displayed.readings} {notes} {selectedNote} unavailable={!!failure} />
 		</section>
-		<div class="min-w-0 lg:col-span-4 lg:row-span-3">
+		<div class="min-w-0 lg:col-span-4 lg:row-span-4">
 			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />
 		</div>
+		<section class="min-w-0 lg:col-span-8" aria-labelledby="pulse-frequency-title">
+			<h2 id="pulse-frequency-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Pulse</span> <span class="outline-text">frequency</span></h2>
+			<div class="border border-rule bg-night p-5 md:p-6">
+				<PulseFrequency result={data.pulse} refreshError={failure} {refreshing} frequency />
+			</div>
+		</section>
 		<div class="min-w-0 lg:col-span-8">
 			<EcgAnalysis window={data.ecg} connectionError={data.error} />
 		</div>

@@ -4,12 +4,13 @@
 	import { untrack } from 'svelte';
 	import { TriangleAlert } from '@lucide/svelte';
 	import { pulseDisplay, validPulseRate, type PulseResult } from './pulse';
-	let { result, refreshError = '', refreshing = false }: { result: PulseResult; refreshError?: string; refreshing?: boolean } = $props();
+	let { result, refreshError = '', refreshing = false, frequency = false }: { result: PulseResult; refreshError?: string; refreshing?: boolean; frequency?: boolean } = $props();
 	// Resets to the applied rate whenever the server reports a new one; editable in between.
 	let rateInput = $derived<number | undefined>(result.sampleRate ?? undefined);
 	let applying = $state(false);
 	let inputError = $state('');
-	let previous = $state<PulseResult | null>(untrack(() => result.status === 'ready' && !refreshError ? result : null));
+	// Props trigger display updates; this cache only remembers the preceding successful result.
+	let previous: PulseResult | null = untrack(() => result.status === 'ready' && !refreshError ? result : null);
 	let display = $derived(pulseDisplay(result, previous, refreshError));
 	let showRatePicker = $derived(result.timestampsInvalid || (!!display.failure && display.result.timestampsInvalid));
 	// The page banner already reports connection failures, so only pulse-specific errors are repeated here.
@@ -18,7 +19,7 @@
 	let timing = $derived(display.result.timing === 'timestamps' ? 'capture timestamps' : `a ${display.result.sampleRate ?? 'missing'} Hz sampling rate`);
 	const uid = $props.id();
 
-	// Keeps the last good estimate across failed refreshes, so it needs history a $derived can't hold.
+	// A successful result is displayed directly; only a later failed refresh reads this cache.
 	$effect(() => {
 		if (result.status !== 'error' && !refreshError) previous = result.status === 'ready' ? result : null;
 	});
@@ -43,16 +44,16 @@
 </script>
 
 <section class="min-w-0" aria-labelledby={`${uid}-title`} aria-busy={applying || refreshing}>
-	<h2 id={`${uid}-title`} class="label text-muted">Estimated heart rate</h2>
+	<h2 id={`${uid}-title`} class="label text-muted">{frequency ? 'Estimated pulse frequency' : 'Estimated heart rate'}</h2>
 	<div>
 		{#if display.result.status === 'ready'}
 			<p class="mt-2 flex items-baseline gap-3 leading-none">
-				<span class="text-[clamp(72px,11vw,128px)] [font-weight:850] [font-stretch:112%] tracking-[-0.02em]">{Math.round(display.result.bpm!)}</span>
-				<span class="display text-[22px] text-lime">BPM</span>
+				<span class="text-[clamp(72px,11vw,128px)] [font-weight:850] [font-stretch:112%] tracking-[-0.02em]">{frequency ? display.result.hz!.toFixed(2) : Math.round(display.result.bpm!)}</span>
+				<span class="display text-[22px] text-lime">{frequency ? 'Hz' : 'BPM'}</span>
 			</p>
-			<p class="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-muted">{display.result.hz!.toFixed(2)} Hz from {display.result.beatCount} beats over {display.result.duration.toFixed(1)} seconds, timed by {timing}. Records {display.result.firstRecordId}–{display.result.lastRecordId}.</p>
+			<p class="mt-4 max-w-[44ch] text-[15px] leading-relaxed text-muted">{frequency ? `${Math.round(display.result.bpm!)} BPM` : `${display.result.hz!.toFixed(2)} Hz`} from {display.result.beatCount} beats over {display.result.duration.toFixed(1)} seconds, timed by {timing}. Records {display.result.firstRecordId}–{display.result.lastRecordId}.</p>
 		{:else if outage}
-			<p class="mt-3 max-w-[30ch] text-[20px] leading-snug font-semibold">No heart rate while the connection is down.</p>
+			<p class="mt-3 max-w-[30ch] text-[20px] leading-snug font-semibold">No {frequency ? 'pulse frequency' : 'heart rate'} while the connection is down.</p>
 		{:else}
 			<p class="mt-3 max-w-[30ch] text-[20px] leading-snug font-semibold">{display.result.reason}</p>
 			{#if display.result.status !== 'unset'}<p class="mt-3 text-[15px] text-muted">{display.result.duration.toFixed(1)} seconds of pulse data, timed by {timing}.</p>{/if}
