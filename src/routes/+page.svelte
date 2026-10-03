@@ -132,12 +132,12 @@
 		<div class="min-w-0 lg:col-span-4 lg:row-span-4">
 			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />
 		</div>
-		<section class="min-w-0 lg:col-span-8" aria-labelledby="pulse-frequency-title">
+		<!-- <section class="min-w-0 lg:col-span-8" aria-labelledby="pulse-frequency-title">
 			<h2 id="pulse-frequency-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Pulse</span> <span class="outline-text">frequency</span></h2>
 			<div class="border border-rule bg-night p-5 md:p-6">
 				<PulseFrequency result={data.pulse} refreshError={failure} {refreshing} frequency />
 			</div>
-		</section>
+		</section> -->
 		<div class="min-w-0 lg:col-span-8">
 			<EcgAnalysis window={data.ecg} connectionError={data.error} />
 		</div>
