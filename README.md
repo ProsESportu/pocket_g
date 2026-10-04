@@ -13,24 +13,22 @@ explicit environment configuration.
 Run `npm install`, then `npm run dev`.
 
 The app loads the last 10 seconds of rows (about 1,250 at 125 Hz) directly
-through the Supabase REST API. It displays latest sensor values,
-a loaded row count, a searchable table with 20 rows per page, and a
-refresh button. Search applies to the loaded rows. Separate EKG, EMG, and pulse
+through the Supabase REST API. It displays latest sensor values and a
+refresh button. Separate EKG, EMG, and pulse
 charts plot all loaded rows by timestamp, with independent scales and gaps for
 missing values. Raw EMG swings across the sensor's range from one sample to the
 next, so its chart shows an activity envelope instead: the deviation from a
 centered 1-second moving mean, as RMS over a centered 0.25-second window, scaled
 from zero. The pulse chart shows beat-to-beat heart rate in BPM rather than the
 raw sensor value. Hover, tap, or focus a chart and use arrow keys (about 0.1 s
-per step, Page keys about 1 s) to inspect readings. Table search does not
-filter the charts. Timestamps use Europe/Warsaw; raw EKG, EMG, and pulse sensor
-values have no assumed units.
+per step, Page keys about 1 s) to inspect readings. Timestamps use
+Europe/Warsaw; raw EKG, EMG, and pulse sensor values have no assumed units.
 Connection errors and empty results have dedicated states.
 
 The universal page loader fetches 12.5 seconds of readings in pages of up to
 1,000 rows (the last page sized from the sample spacing so far), then the ECG
 window, during initial server rendering and subsequent browser refreshes using
-the public environment configuration. The same readings feed the charts, table,
+the public environment configuration. The same readings feed the charts
 and pulse estimate; pulse samples are fetched separately only in sampling-rate
 fallback mode. JavaScript is required for monitoring and model analysis.
 The existing adapter-auto deployment setup is retained; static hosting needs a
@@ -41,7 +39,7 @@ background tab. Returning to the tab or resuming monitoring refreshes immediatel
 Pause/Resume controls refresh and the gyro session. ECG and EMG analysis never
 run automatically; they start only from **Analyze ECG** and **Analyze EMG**.
 Browser throttling or suspension can delay the five-second cadence. Failed refreshes
-preserve the last successful charts, cards, table, count, and fetch timestamp.
+preserve the last successful charts, cards, and fetch timestamp.
 
 With user approval, the `allow_public_sample_readings` migration granted SELECT
 to `anon` and added a public read policy on the existing sample table. RLS remains
@@ -54,8 +52,12 @@ tests use Node.js's built-in TypeScript stripping (Node.js 22.18+).
 ## Gyro movement energy
 
 The movement energy section reads `public.readings` independently of the EKG,
-EMG, and pulse loaders. Gyro axes are confirmed to be in **radians per second**;
-there is no raw-count or degrees/s conversion. Enter the mass moved in kg and
+EMG, and pulse loaders. The MPU6050 stores gyro axes in **degrees per second**:
+every axis clips at exactly ±250, the sensor's default ±250 °/s range, and the
+accelerometer at its default ±2 g. The loader converts gyro values to rad/s, so
+every calculation below works in rad/s. Before this conversion, a 2 kg elbow
+session read about 3,300 times too high and rest noise (~0.3 °/s) never fell
+below the rest threshold, so sets never ended. Enter the mass moved in kg and
 apply settings. The pivot toggle defaults to **Elbow — 35 cm** and also offers
 **Shoulder — 65 cm** (30 cm upper arm plus 35 cm elbow-to-load). Both distances
 can be overridden under Calculation settings. Switching pivots immediately
@@ -123,9 +125,10 @@ with the energy session; reload reconstructs them from the same saved tab-local
 reset boundary. Constant-speed movement may form a zero-work set because the
 estimate counts increases in kinetic energy, not the cost of sustaining motion.
 
-**Recording quality** under the signal strip examines the original fetched
-physiological rows before invalid timestamps are excluded from charts. Its
-Loaded signal window usually covers about 12.5 seconds, while the strip remains
+**Recording quality**, in the right-hand column below the coach's notes,
+examines the original fetched physiological rows before invalid timestamps are
+excluded from charts. Its Loaded signal window usually covers about 12.5
+seconds, while the strip remains
 10 seconds; the actual loaded count and measurable capture span are shown.
 Channel percentages count finite values out of loaded rows, with missing-sample
 counts and longest missing runs. Details show invalid/non-increasing timestamps,
@@ -133,7 +136,7 @@ absent IDs, and capture pauses over the larger of one second or five median
 positive consecutive sample intervals. Observed timing is derived from those
 intervals and never changes an analysis model's assumed sampling rate.
 
-Gyro session quality is calculated separately for the complete loaded gyro
+Gyro session quality, below it, is calculated separately for the complete loaded gyro
 session, even before mass is configured. It requires all three finite axes and
 a valid timestamp, and uses the energy calculation's two-second gap limit.
 Stationary gyro readings are valid. Usable duration includes only continuous
@@ -144,6 +147,57 @@ signal quality. Last capture and last successful fetch times are shown
 separately; failed refreshes retain the prior summary as stale, and pausing
 monitoring is labeled independently. No additional database requests, models,
 or persisted workout records are introduced by these features.
+
+## Reps, exercise recognition and form checks
+
+**Your reps** reads the same motion session as Movement energy, now including the
+accelerometer (`acc_x/y/z`, in g). Sets are the ones in Energy by detected set, so
+their numbers match. The forearm angle is the angle between the smoothed (0.4 s)
+gravity direction and the rest just before the set. A rep is a rise and fall of at
+least 30°, with tops at least 0.8 s apart, and it counts once the arm comes back
+down. Range is the angle between the bottom and top of each rep. Up and down times
+run between the points 5% of the range from the bottom, interpolated between
+samples. At about 5 Hz, reps faster than about 1 s may be missed.
+
+**Teaching:** press Start teaching, do 3–5 reps and press Save exercise. A template
+stores the average bottom and top gravity directions, the main hinge axis (principal
+axis of the gyro vectors) and median range, tempo, lifting speed and off-axis
+rotation. Templates are saved in this browser's `localStorage`. A set with at least
+2 reps is named after the closest template when both its start direction and its
+hinge are within 35°; otherwise it shows Unknown movement. Range is not used for
+recognition, so short reps are still recognised and then flagged. Directions are
+relative to the strap, so wear the sensor the same way as when teaching.
+
+**Form checks** compare each rep of a recognised set with its template: Short range
+(under 80% of its range), Fast lowering (under 60% of its lowering time), Swing (peak
+lifting speed over 150%, or an axis at the ±250 °/s sensor limit) and Twisting
+(off-axis rotation more than 15 points above it). Coach's notes add one note per set,
+with times only, because motion record IDs aren't strip IDs.
+
+## Heart recovery and muscle activity per rep
+
+The motion sensor and the EKG/EMG/pulse board keep separate clocks. **Motion clock
+ahead by (s)** under Your reps › Calculation settings (saved in this browser) moves
+motion times onto the pulse board's clock.
+
+**Heart recovery** starts by itself when a set completes after the page has loaded,
+at the set's last active sample, or from Start recovery now at the newest pulse
+reading. It pages `id,created_at,puls` forward from that moment and reuses the pulse
+estimator on 10-second windows: the first 10 s, then every 5 s, and the 55–65 s
+window. When the board's timestamps run backwards inside a window, it is timed by
+the same sampling rate as the heart-rate panel (1,800 Hz by default). Finished
+windows are kept, so each is analysed once. The drop is the start minus the
+one-minute heart rate, after rounding each to
+whole BPM. An unclear pulse at either end gives the estimator's reason instead of a
+number. The last five results stay in this tab.
+
+**Muscle activity per rep** loads `id,created_at,emg` for a set's time range once
+the set has ended. It averages the existing EMG activity envelope over each rep.
+Each rep is shown as a percentage of the median of reps 1–3 in the same set, because
+electrode placement changes EMG amplitude. Under 50% is tagged Low muscle activity.
+A rep needs 80% of its expected 125 Hz samples. The angle chart overlays the EMG
+envelope in blue, so a clock mismatch shows as bursts that don't line up with the
+lifts.
 
 ## Model analysis and coach’s notes
 
@@ -176,12 +230,17 @@ only the overlap with the currently visible strip.
 ## Pulse frequency
 
 Pulse frequency automatically uses `created_at` capture timestamps to estimate
-BPM and Hz on the existing five-second/manual refresh. The sampling-rate picker
-appears only when timestamps are missing, invalid, repeated, or run backwards
-within the current continuous recording. In that case, enter the sensor’s actual
-acquisition rate (10–1,000 Hz) and click **Apply**. The fallback rate is saved in
-the `pulseSampleRate` URL parameter; valid timestamps always take priority over
-that saved rate. The dedicated Pulse frequency panel beside the session heading
+BPM and Hz on the existing five-second/manual refresh. When timestamps are
+missing, invalid, repeated, or run backwards within the current continuous
+recording, the board's known rate, **1,800 Hz**, times the pulse instead; valid
+timestamps always take priority.
+
+Since 2026-10-04 the EKG/EMG/pulse board samples at about 1,800 Hz (1,845–1,890
+rows per second measured), and its timestamps run backwards because upload batches
+overlap. Each 500-sample batch is stamped 0.5 ms apart, and rows from two batches
+can interleave. Until the uploader stamps samples in order, pulse timing therefore
+uses the sampling rate. The ECG model, EMG fatigue analysis and 12,501-row strip
+loader still assume 125 Hz. The dedicated Pulse frequency panel beside the session heading
 shows Hz prominently alongside BPM, beat count, duration, timing source, and
 record IDs. It follows live/manual refreshes and preserves the last successful
 estimate with a stale label after failures. Raw pulse values remain in the
@@ -189,7 +248,9 @@ table.
 
 The estimate uses the latest ten seconds of the page's readings. In
 sampling-rate fallback mode, the browser reads them through separate paginated,
-snapshot-bounded read-only requests, capped at 10,001 rows. Calculation uses the newest continuous
+snapshot-bounded read-only requests, up to `ceil(10 × rate) + 1` rows (18,001 at
+1,800 Hz). The strip's own loader keeps its 1,000-rows-per-second cap, so a faster
+board shows a shorter strip rather than a heavier refresh. Calculation uses the newest continuous
 segment in record-ID order, ending at missing/nonfinite values or ID gaps.
 Timestamp mode preserves microseconds and handles irregular sample spacing;
 capture pauses longer than both one second and five median sample intervals
@@ -197,6 +258,9 @@ start a new segment. Sampling-rate fallback uses up to `ceil(10 × rate) + 1`
 rows and assumes each consecutive row is one uniformly spaced sample.
 Unmarked recording pauses cannot be detected in fallback mode.
 
+Recordings at 500 Hz or more are first averaged in blocks down to about 250
+samples per second; a pulse wave has nothing above about 10 Hz. Without this
+step, the rolling median makes each estimate at 1,800 Hz take about half a second.
 The estimator uses a centered 40 ms moving average, a centered 1.5-second rolling
 median baseline, and positive-going peaks with 20% percentile-range prominence
 and 250 ms minimum separation. These windows and peak intervals use actual

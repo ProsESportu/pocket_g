@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { latestGyroId, loadGyroSnapshot } from '../src/lib/gyro-readings.ts';
 
-const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, created_at: new Date(1760000000000 + i * 250).toISOString(), gyro_x: 0, gyro_y: 1, gyro_z: 0 }));
+const rows = (count) => Array.from({ length: count }, (_, i) => ({ id: i + 1, created_at: new Date(1760000000000 + i * 250).toISOString(), gyro_x: 0, gyro_y: 180, gyro_z: 0 }));
+// The sensor sends °/s; loaded rows carry rad/s.
+const radians = (value) => typeof value === 'number' ? value * Math.PI / 180 : value;
+const loaded = (input) => input.map((row) => ({ ...row, gyro_x: radians(row.gyro_x), gyro_y: radians(row.gyro_y), gyro_z: radians(row.gyro_z) }));
 function databaseMock(input, cap = 1000, insertedAfterSnapshot = []) {
 	const calls = [];
 	let readings = [...input];
@@ -20,7 +23,7 @@ function databaseMock(input, cap = 1000, insertedAfterSnapshot = []) {
 			readings.push(...insertedAfterSnapshot);
 			return Response.json(last ? [{ id: last.id }] : []);
 		}
-		assert.equal(url.searchParams.get('select'), 'id,created_at,gyro_x,gyro_y,gyro_z');
+		assert.equal(url.searchParams.get('select'), 'id,created_at,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z');
 		assert.equal(url.searchParams.get('order'), 'id.asc');
 		const [, after, through] = url.searchParams.get('and').match(/^\(id.gt.(\d+),id.lte.(\d+)\)$/);
 		return Response.json(readings.filter((row) => row.id > +after && row.id <= +through).slice(0, cap));
@@ -32,7 +35,7 @@ const load = (fetcher, afterId = 0, signal) => loadGyroSnapshot(fetcher, 'https:
 test('loads all history with ascending keyset pagination across smaller API caps', async () => {
 	const input = rows(2301);
 	const { fetcher, calls } = databaseMock(input, 200);
-	assert.deepEqual(await load(fetcher), { readings: input, throughId: 2301 });
+	assert.deepEqual(await load(fetcher), { readings: loaded(input), throughId: 2301 });
 	assert.equal(calls.length, 13);
 	assert.equal(calls[1].url.searchParams.get('and'), '(id.gt.0,id.lte.2301)');
 	assert.equal(calls[2].url.searchParams.get('and'), '(id.gt.200,id.lte.2301)');
@@ -43,9 +46,9 @@ test('concurrent inserts stay outside the fixed snapshot; later loads fetch only
 	const input = rows(1500);
 	const newer = rows(1600).slice(1500);
 	const { fetcher } = databaseMock(input, 1000, newer);
-	assert.deepEqual(await load(fetcher), { readings: input, throughId: 1500 });
+	assert.deepEqual(await load(fetcher), { readings: loaded(input), throughId: 1500 });
 	const next = databaseMock([...input, ...newer]);
-	assert.deepEqual(await load(next.fetcher, 1500), { readings: newer, throughId: 1600 });
+	assert.deepEqual(await load(next.fetcher, 1500), { readings: loaded(newer), throughId: 1600 });
 	assert.equal(next.calls[1].url.searchParams.get('and'), '(id.gt.1500,id.lte.1600)');
 });
 
@@ -60,7 +63,15 @@ test('empty/unchanged tables produce no new rows; replacement requires an explic
 test('null gyro readings remain in the snapshot so the calculator can break segments', async () => {
 	const input = rows(10);
 	input[5].gyro_y = null;
-	assert.deepEqual((await load(databaseMock(input).fetcher)).readings, input);
+	assert.deepEqual((await load(databaseMock(input).fetcher)).readings, loaded(input));
+	assert.equal((await load(databaseMock(input).fetcher)).readings[5].gyro_y, null);
+});
+
+test('converts the MPU6050 degrees per second to radians per second', async () => {
+	const [row] = (await load(databaseMock([{ ...rows(1)[0], gyro_x: -90, gyro_y: 180, gyro_z: 250 }]).fetcher)).readings;
+	assert.equal(row.gyro_x, -Math.PI / 2);
+	assert.equal(row.gyro_y, Math.PI);
+	assert.ok(Math.abs(row.gyro_z - 4.3633) < 1e-4);
 });
 
 test('rejects failed/malformed pages, bad boundaries and out-of-order or unbounded rows', async () => {

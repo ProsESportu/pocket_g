@@ -1,4 +1,6 @@
-import { PULSE } from './pulse.ts';
+// Rows per second of capture the dashboard loads at most, so a faster board shows a shorter strip rather than a
+// heavier refresh. This is separate from the pulse sampling-rate limit.
+const ROW_RATE_CAP = 1000;
 
 export type Reading = {
 	id: number;
@@ -10,7 +12,7 @@ export type Reading = {
 
 /** Newest rows first, paging back until they cover `seconds` of capture time, run out, or reach the row cap. */
 export async function loadRecentReadings(fetcher: typeof fetch, baseUrl: string, apiKey: string, seconds: number): Promise<Reading[]> {
-	const limit = Math.ceil(seconds * PULSE.maxSampleRate) + 1;
+	const limit = Math.ceil(seconds * ROW_RATE_CAP) + 1;
 	const rows: Reading[] = [];
 	const signal = AbortSignal.timeout(10000);
 	let beforeId: number | undefined;

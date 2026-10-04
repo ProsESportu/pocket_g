@@ -37,7 +37,7 @@ test('pages across API caps, uses a fixed snapshot and shared timeout signal', a
 
 test('always checks timestamps even with unset/invalid rates; empty dashboards do not fetch', async () => {
     const forbidden = () => { throw new Error('Unexpected fetch'); };
-    for (const rate of [null, '', 'oops', '9', '1001']) {
+    for (const rate of [null, '', 'oops', '9', '4001']) {
         const { fetcher, calls } = databaseMock(rows(1200));
         const result = await load(fetcher, 1200, rate);
         assert.equal(result.sampleRate, null);

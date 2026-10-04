@@ -3,7 +3,7 @@ import type { PageLoad } from './$types';
 import { loadRecentReadings, type Reading } from '#lib/readings.ts';
 import { databaseEcgWindow } from '#lib/ecg-database.ts';
 import { loadDatabaseEcg } from '#lib/ecg-readings.ts';
-import { estimatePulseWithTiming, pulseConfiguration, timestampPulseWindow } from '#lib/pulse.ts';
+import { estimatePulseWithTiming, PULSE, pulseConfiguration, timestampPulseWindow } from '#lib/pulse.ts';
 import { loadDatabasePulse } from '#lib/pulse-readings.ts';
 import { recordingQuality } from '#lib/recording-quality.ts';
 
@@ -12,11 +12,12 @@ import { recordingQuality } from '#lib/recording-quality.ts';
 const STRIP_SECONDS = 10;
 const RATE_LEAD_SECONDS = 2.5;
 
-export const load: PageLoad = async ({ fetch, depends, url: pageUrl }) => {
+export const load: PageLoad = async ({ fetch, depends }) => {
 	depends('app:readings');
-	const pulseConfig = pulseConfiguration(pageUrl.searchParams.get('pulseSampleRate'));
+	// The board's known rate times the pulse whenever its capture timestamps can't.
+	const pulseConfig = pulseConfiguration(String(PULSE.defaultSampleRate));
 	const noPulse = estimatePulseWithTiming([], pulseConfig);
-	const base = { readings: [] as Reading[], quality: recordingQuality([]), ecg: databaseEcgWindow([]), pulse: noPulse, heartRate: noPulse, loadedAt: '', error: '' };
+	const base = { readings: [] as Reading[], quality: recordingQuality([]), ecg: databaseEcgWindow([]), pulse: noPulse, heartRate: noPulse, pulseRate: pulseConfig.sampleRate, loadedAt: '', error: '' };
 	if (!env.PUBLIC_SUPABASE_URL || !env.PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
 		return { ...base, error: 'Add your Supabase URL and publishable key to .env, then restart the app.' };
 	}
@@ -33,7 +34,7 @@ export const load: PageLoad = async ({ fetch, depends, url: pageUrl }) => {
 			timed ? estimatePulseWithTiming(rows, pulseConfig) : loadDatabasePulse(fetch, env.PUBLIC_SUPABASE_URL, env.PUBLIC_SUPABASE_PUBLISHABLE_KEY, rows[0]?.id, pulseConfig)
 		]);
 		const heartRate = timed ? estimatePulseWithTiming(rows, pulseConfig, STRIP_SECONDS + RATE_LEAD_SECONDS) : pulse;
-		return { readings, quality, ecg, pulse, heartRate, loadedAt: new Date().toISOString(), error: '' };
+		return { readings, quality, ecg, pulse, heartRate, pulseRate: pulseConfig.sampleRate, loadedAt: new Date().toISOString(), error: '' };
 	} catch (error) {
 		// Our own errors explain the problem; network failures and timeouts get the generic message.
 		return { ...base, error: error instanceof Error && error.name === 'Error' ? error.message : 'Could not reach Supabase. Check your connection and project URL, then try again.' };

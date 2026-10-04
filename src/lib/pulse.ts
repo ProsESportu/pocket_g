@@ -1,11 +1,13 @@
 import type { Reading } from './readings.ts';
 import { captureMilliseconds } from './capture-time.ts';
 
-// Initial engineering defaults for a positive-going pulse waveform.
+// Initial engineering defaults for a positive-going pulse waveform. The EKG/EMG/pulse board samples at about
+// 1,800 Hz (1,845–1,890 rows per second measured on 2026-10-04), and its upload batches overlap so timestamps
+// run backwards; the default rate times the pulse until the uploader stamps samples in order.
 export const PULSE = {
-	minSampleRate: 10, maxSampleRate: 1000, windowSeconds: 10, minSeconds: 5,
+	minSampleRate: 10, maxSampleRate: 4000, defaultSampleRate: 1800, windowSeconds: 10, minSeconds: 5,
 	smoothingSeconds: 0.04, baselineSeconds: 1.5, prominenceFraction: 0.2,
-	minPeakSeconds: 0.25, minBeats: 3, minBpm: 30, maxBpm: 240, maxIntervalMad: 0.3
+	minPeakSeconds: 0.25, minBeats: 3, minBpm: 30, maxBpm: 240, maxIntervalMad: 0.3, analysisRate: 250
 } as const;
 export type PulseReading = Pick<Reading, 'id' | 'puls'> & Partial<Pick<Reading, 'created_at'>>;
 export type PulseResult = {
@@ -26,7 +28,7 @@ export function pulseConfiguration(value: string | null): PulseResult {
 	const valid = sampleRate !== null && validPulseRate(sampleRate);
 	return {
 		status: value === null ? 'unset' : 'unavailable',
-		reason: value === null ? 'Enter the sensor sampling rate to calculate pulse frequency.' : valid ? 'Not enough continuous pulse data.' : 'Sampling rate must be a number from 10 to 1,000 Hz.',
+		reason: value === null ? 'Enter the sensor sampling rate to calculate pulse frequency.' : valid ? 'Not enough continuous pulse data.' : `Sampling rate must be a number from ${PULSE.minSampleRate} to ${PULSE.maxSampleRate.toLocaleString('en-GB')} Hz.`,
 		bpm: null, hz: null, sampleRate: valid ? sampleRate : null,
 		duration: 0, beatCount: 0, firstRecordId: null, lastRecordId: null,
 		timing: 'timestamps', timestampsInvalid: false, timingReason: '', rates: []
@@ -114,6 +116,18 @@ export function estimatePulse(readings: PulseReading[], sampleRate: number): Pul
 	return analyzePulse(segment, segment.map((_, i) => i / sampleRate), result);
 }
 
+/** Averages each run of `step` samples; the middle row stands for the bin, so rates keep real record IDs. */
+function binned(segment: PulseReading[], times: number[], step: number) {
+	const rows: PulseReading[] = [], at: number[] = [];
+	for (let start = 0; start + step <= segment.length; start += step) {
+		let value = 0, time = 0;
+		for (let i = start; i < start + step; i++) { value += segment[i].puls!; time += times[i]; }
+		rows.push({ ...segment[start + (step >> 1)], puls: value / step });
+		at.push(time / step);
+	}
+	return { segment: rows, times: at };
+}
+
 function analyzePulse(segment: PulseReading[], times: number[], result: PulseResult): PulseResult {
 	result.duration = times.length ? times.at(-1)! - times[0] : 0;
 	result.firstRecordId = segment[0]?.id ?? null;
@@ -122,6 +136,10 @@ function analyzePulse(segment: PulseReading[], times: number[], result: PulseRes
 		result.reason = 'Need at least 5 seconds of continuous pulse samples.';
 		return result;
 	}
+	// A fast board (about 1,800 Hz) is averaged down to about 250 samples per second first. A pulse wave has
+	// nothing above about 10 Hz, and the rolling median would otherwise re-sort thousands of samples per sample.
+	const step = Math.floor((segment.length - 1) / result.duration / PULSE.analysisRate);
+	if (step > 1) ({ segment, times } = binned(segment, times, step));
 	const raw = segment.map((row) => row.puls!);
 	const scale = Math.max(...raw.map(Math.abs));
 	if (!scale) { result.reason = 'The pulse signal is flat.'; return result; }

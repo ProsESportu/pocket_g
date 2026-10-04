@@ -1,6 +1,9 @@
-import type { GyroReading } from './gyro-energy.ts';
+import { DEGREES, type ImuReading } from './gyro-energy.ts';
 
-export type GyroSnapshot = { readings: GyroReading[]; throughId: number };
+export type GyroSnapshot = { readings: ImuReading[]; throughId: number };
+
+// Non-numeric values pass through unchanged so the calculators still reject them.
+const radians = (value: unknown) => typeof value === 'number' ? value * DEGREES : value;
 
 async function readPage(fetcher: typeof fetch, baseUrl: string, apiKey: string, params: Record<string, string>, signal: AbortSignal): Promise<unknown[]> {
 	signal.throwIfAborted();
@@ -29,19 +32,19 @@ export async function loadGyroSnapshot(fetcher: typeof fetch, baseUrl: string, a
 	const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
 	const throughId = await latestGyroId(fetcher, baseUrl, apiKey, requestSignal);
 	if (throughId < afterId) throw new Error('The gyro recording was cleared or replaced. Reset the energy session to start from the current recording.');
-	const readings: GyroReading[] = [];
+	const readings: ImuReading[] = [];
 	let cursor = afterId;
 	while (cursor < throughId) {
 		const page = await readPage(fetcher, baseUrl, apiKey, {
-			select: 'id,created_at,gyro_x,gyro_y,gyro_z', order: 'id.asc', limit: '1000',
+			select: 'id,created_at,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z', order: 'id.asc', limit: '1000',
 			and: `(id.gt.${cursor},id.lte.${throughId})`
 		}, requestSignal);
 		if (!page.length) break;
 		for (const item of page) {
-			const row = item as GyroReading | null;
+			const row = item as ImuReading | null;
 			if (!row || !Number.isSafeInteger(row.id) || row.id <= cursor || row.id > throughId) throw new Error('The database returned gyro readings out of order.');
 			cursor = row.id;
-			readings.push(row);
+			readings.push({ ...row, gyro_x: radians(row.gyro_x), gyro_y: radians(row.gyro_y), gyro_z: radians(row.gyro_z) } as ImuReading);
 		}
 		// Continue even when the project caps responses below 1,000 rows.
 	}

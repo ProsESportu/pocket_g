@@ -2,18 +2,16 @@
 	import { onMount, untrack } from 'svelte';
 	import * as env from '$app/env/public';
 	import { RotateCcw, TriangleAlert } from '@lucide/svelte';
-	import { defaultGyroSettings, estimateGyroEnergy, GYRO_STORAGE_KEY, pivotDistanceCm, positiveFinite,
+	import { defaultGyroSettings, estimateGyroEnergy, GYRO, GYRO_STORAGE_KEY, pivotDistanceCm, positiveFinite,
 		restoreGyroSession, serializeGyroSession, type GyroPivot } from './gyro-energy.ts';
 	import { latestGyroId, loadGyroSnapshot } from './gyro-readings.ts';
-	import { GyroSession, initialGyroSession } from './gyro-session.ts';
+	import { GyroSession, initialGyroSession, type GyroSessionState } from './gyro-session.ts';
 	import EnergySets from './EnergySets.svelte';
-	import RecordingQuality from './RecordingQuality.svelte';
-	import { gyroRecordingQuality } from './recording-quality.ts';
 
-	let { monitoring = true, refreshRequest }: { monitoring?: boolean; refreshRequest: { sequence: number; manual: boolean } } = $props();
+	// `session` shares this tab's motion session (gyro in rad/s, accelerometer in g) with the rep counter and its quality panel.
+	let { monitoring = true, refreshRequest, session = $bindable(initialGyroSession()) }: { monitoring?: boolean; refreshRequest: { sequence: number; manual: boolean }; session?: GyroSessionState } = $props();
 	const uid = $props.id();
 	let settings = $state.raw(defaultGyroSettings());
-	let session = $state.raw(initialGyroSession());
 	let massInput = $state<number | undefined>();
 	let elbowInput = $state<number | undefined>(35);
 	let shoulderInput = $state<number | undefined>(65);
@@ -23,7 +21,6 @@
 	let controller: GyroSession | undefined;
 	let seenRequest = -1;
 	let energy = $derived(estimateGyroEnergy(session.readings, settings));
-	let quality = $derived(gyroRecordingQuality(session.readings));
 	let distance = $derived(pivotDistanceCm(settings));
 	let canShowEnergy = $derived(session.hasLoaded && (energy.status === 'ready' || energy.status === 'empty'));
 	const number = (value: number) => new Intl.NumberFormat('en-GB', { maximumSignificantDigits: 5 }).format(value);
@@ -123,7 +120,7 @@
 					<label class="block"><span class="label mb-2 block text-muted">Elbow distance (cm)</span><input class="min-h-11 w-full border border-white/45 bg-night px-3 text-[16px]" type="number" inputmode="decimal" step="any" min="0" required bind:value={elbowInput} /></label>
 					<label class="block"><span class="label mb-2 block text-muted">Shoulder distance (cm)</span><input class="min-h-11 w-full border border-white/45 bg-night px-3 text-[16px]" type="number" inputmode="decimal" step="any" min="0" required bind:value={shoulderInput} /></label>
 				</div>
-				<p class="mt-4 text-[13px] leading-relaxed text-muted">Gyro units: rad/s. Smoothing: 0.25 s. Rest threshold: 0.05 rad/s. These are engineering assumptions, not calibrated sensor measurements.</p>
+				<p class="mt-4 text-[13px] leading-relaxed text-muted">The MPU6050 sends degrees per second (its axes clip at ±{GYRO.sensorLimitDegrees} °/s); readings are converted to rad/s. Smoothing: 0.25 s. Rest threshold: 0.05 rad/s (2.9 °/s). These are engineering assumptions, not calibrated sensor measurements.</p>
 			</details>
 			{#if inputError}<p id={`${uid}-input-error`} class="mt-4 text-[15px] text-lime" role="alert">{inputError}</p>{/if}
 		</form>
@@ -146,7 +143,6 @@
 			{#if session.error}<p class="mt-3 flex gap-2 text-[15px] leading-relaxed" role="alert"><TriangleAlert size={18} class="mt-0.5 shrink-0 text-lime" /><span>{session.hasLoaded ? 'Stale snapshot. ' : ''}{session.error}</span></p>{/if}
 		</div>
 		{#if canShowEnergy}<EnergySets sets={energy.sets} />{/if}
-		<RecordingQuality summary={quality} title="Gyro session quality" label="Current gyro session" loadedAt={session.loadedAt} stale={!!session.error && session.hasLoaded} {monitoring} refreshing={session.busy} />
 		<div class="mt-6 border-t border-rule pt-5">
 			<button class="btn btn-line w-full sm:w-auto" type="button" disabled={!mounted || session.resetting} onclick={() => controller?.reset()}><RotateCcw size={17} />Reset energy session</button>
 			<p class="mt-3 text-[13px] leading-relaxed text-muted">Starts counting future readings in this tab. Supabase history is preserved; mass and pivot settings stay selected. Settings and the reset survive reloads in this tab.</p>

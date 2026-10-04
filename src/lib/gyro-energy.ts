@@ -7,10 +7,14 @@ export type GyroReading = {
 	gyro_y: number | null;
 	gyro_z: number | null;
 };
+/** Gyro in rad/s after loading; the accelerometer stays in g (the MPU6050 default ±2 g range). */
+export type ImuReading = GyroReading & { acc_x?: number | null; acc_y?: number | null; acc_z?: number | null };
 
 export type GyroPivot = 'elbow' | 'shoulder';
 export type GyroSettings = { massKg: number | null; pivot: GyroPivot; elbowCm: number; shoulderCm: number };
-export const GYRO = { smoothingSeconds: 0.25, restRadiansPerSecond: 0.05, maxGapSeconds: 2, setRestSeconds: 5 } as const;
+// The MPU6050 sends degrees per second (every axis clips at its default ±250 °/s range); the loader converts to rad/s.
+export const GYRO = { smoothingSeconds: 0.25, restRadiansPerSecond: 0.05, maxGapSeconds: 2, setRestSeconds: 5, sensorUnits: 'deg/s', sensorLimitDegrees: 250 } as const;
+export const DEGREES = Math.PI / 180;
 export const GYRO_STORAGE_KEY = 'pocket-g:gyro-energy:v1';
 export const defaultGyroSettings = (): GyroSettings => ({ massKg: null, pivot: 'elbow', elbowCm: 35, shoulderCm: 65 });
 export const positiveFinite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0;

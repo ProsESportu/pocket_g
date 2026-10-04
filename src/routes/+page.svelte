@@ -1,10 +1,19 @@
 <script lang="ts">
 	import { invalidate } from '$app/navigation';
 	import { onMount, untrack } from 'svelte';
-	import { ChevronLeft, ChevronRight, Pause, Play, RefreshCw, Search, TriangleAlert } from '@lucide/svelte';
+	import { Pause, Play, RefreshCw, TriangleAlert } from '@lucide/svelte';
 	import SessionStrip from '#lib/SessionStrip.svelte';
 	import RecordingQuality from '#lib/RecordingQuality.svelte';
 	import GyroEnergy from '#lib/GyroEnergy.svelte';
+	import RepCounter from '#lib/RepCounter.svelte';
+	import { initialGyroSession } from '#lib/gyro-session.ts';
+	import { gyroRecordingQuality } from '#lib/recording-quality.ts';
+	import { analyzeReps } from '#lib/reps.ts';
+	import { assessSet, type ExerciseTemplate } from '#lib/exercises.ts';
+	import { formCoachNotes } from '#lib/rep-coach.ts';
+	import HeartRecovery from '#lib/HeartRecovery.svelte';
+	import { recoveryCoachNotes, type Recovery } from '#lib/recovery.ts';
+	import { muscleCoachNotes, type SetMuscle } from '#lib/rep-emg.ts';
 	import CoachNotes from '#lib/CoachNotes.svelte';
 	import EcgAnalysis from '#lib/EcgAnalysis.svelte';
 	import EmgAnalysis from '#lib/EmgAnalysis.svelte';
@@ -20,10 +29,8 @@
 	let displayed = $derived(data.error ? lastSuccess ?? data : data);
 	let autoRefresh = $state(true);
 	let pageVisible = $state(true);
-	let search = $state('');
 	let refreshing = $state(false);
 	let refreshError = $state('');
-	let page = $state(0);
 	let selectedNote = $state<string | null>(null);
 	let emgResult = $state.raw<EmgResult | null>(null);
 	let ecgResult = $state.raw<EcgResult | null>(null);
@@ -32,20 +39,25 @@
 	let emgStale = $derived(emgState.busy || !!emgState.error || (emgResult?.window.lastRecordId != null && displayed.readings[0]?.id !== emgResult.window.lastRecordId));
 	let ecgStale = $derived(ecgState.busy || !!ecgState.error || !!displayed.ecg.error || (!!ecgResult && (ecgResult.window.firstRecordId !== displayed.ecg.firstRecordId || ecgResult.window.lastRecordId !== displayed.ecg.lastRecordId || ecgResult.window.available !== displayed.ecg.available || ecgResult.window.rowCount !== displayed.ecg.rowCount)));
 	let gyroRefreshRequest = $state.raw({ sequence: 0, manual: false });
-	// Rows newer than this arrived in the latest refresh and flash once in the log.
-	let freshAfter = $state<number | null>(null);
-	const pageSize = 20;
+	// One motion session feeds movement energy, the rep counter and the form checks.
+	let gyroSession = $state.raw(initialGyroSession());
+	let imuReadings = $derived(gyroSession.readings);
+	let gyroQuality = $derived(gyroRecordingQuality(gyroSession.readings));
+	let templates = $state.raw<ExerciseTemplate[]>([]);
+	let clockOffset = $state(0);
+	let recoveries = $state.raw<Recovery[]>([]);
+	let setMuscle = $state.raw<SetMuscle | null>(null);
+	let repSets = $derived(analyzeReps(imuReadings));
+	let assessments = $derived(repSets.map((set) => assessSet(set, templates)));
 	let notes = $derived.by(() => {
 		const checks = signalChecks(displayed.readings, displayed.pulse);
+		const workout = [...formCoachNotes(repSets, assessments), ...muscleCoachNotes(setMuscle, repSets), ...recoveryCoachNotes(recoveries)];
 		return [...checks.filter((note) => note.kind === 'fix'),
 			...ecgCoachNotes(ecgResult, displayed.readings, ecgStale || !!failure),
 			...emgCoachNote(emgResult, displayed.readings, emgStale || !!failure),
-			...checks.filter((note) => note.kind === 'try'), ...checks.filter((note) => note.kind === 'keep')];
+			...workout.filter((note) => note.kind === 'try'), ...checks.filter((note) => note.kind === 'try'),
+			...workout.filter((note) => note.kind === 'keep'), ...checks.filter((note) => note.kind === 'keep')];
 	});
-	let filtered = $derived(displayed.readings.filter((row) => [row.id, row.created_at, row.ekg, row.emg, row.puls].join(' ').toLowerCase().includes(search.toLowerCase())));
-	let pages = $derived(Math.max(1, Math.ceil(filtered.length / pageSize)));
-	let currentPage = $derived(Math.min(page, pages - 1));
-	let visible = $derived(filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize));
 	let failure = $derived(data.error || refreshError);
 	let status = $derived(failure ? 'Connection problem' : !autoRefresh ? 'Paused' : !pageVisible ? 'Live in background' : 'Live');
 	// The Live dot beats at the measured heart rate; implausible estimates leave it still.
@@ -55,7 +67,6 @@
 	});
 	const date = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
 	const time = (value: string) => new Intl.DateTimeFormat('en-GB', { timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
-	const cell = (value: number | null) => value === null || !Number.isFinite(value) ? null : new Intl.NumberFormat('en-GB', { maximumFractionDigits: 3 }).format(value);
 	onMount(() => {
 		pageVisible = document.visibilityState === 'visible';
 		const updateVisibility = () => {
@@ -81,13 +92,9 @@
 		if (refreshing) return;
 		refreshing = true;
 		refreshError = '';
-		const newest = displayed.readings[0]?.id ?? null;
 		try {
 			await invalidate('app:readings');
-			if (!data.error) {
-				lastSuccess = data;
-				freshAfter = newest;
-			}
+			if (!data.error) lastSuccess = data;
 		}
 		catch { refreshError = 'Refresh failed.'; }
 		finally { refreshing = false; }
@@ -98,11 +105,6 @@
 	<title>Pocket G</title>
 	<meta name="description" content="Live EKG, EMG and pulse readings with sensor checks while you train." />
 </svelte:head>
-
-{#snippet value(reading: number | null)}
-	{@const shown = cell(reading)}
-	{#if shown === null}<span aria-hidden="true" class="text-muted">–</span><span class="sr-only">No value</span>{:else}{shown}{/if}
-{/snippet}
 
 <header class="border-b border-rule">
 	<div class="mx-auto flex h-16 max-w-[1280px] items-center justify-between gap-3 px-4 md:px-8">
@@ -160,18 +162,27 @@
 			<p>{failure} {lastSuccess ? `Showing readings from ${time(lastSuccess.loadedAt)}.` : ''} {autoRefresh ? 'Retrying every 5 seconds.' : 'Refresh now, or resume live updates to retry.'}</p>
 		</div>
 	{/if}
-	<!-- Keep coach notes alongside the strip, pulse frequency, and both analysis panels. -->
+	<!-- Coach notes and both quality panels share the right column beside the main panels. -->
 	<div class="grid items-start gap-x-8 gap-y-14 lg:grid-cols-12">
 		<section class="min-w-0 lg:col-span-8" aria-labelledby="signals-title">
 			<h2 id="signals-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Your</span> <span class="outline-text">signals</span></h2>
 			<SessionStrip readings={displayed.readings} heartRate={displayed.heartRate} {notes} {selectedNote} unavailable={!!failure} />
-			<RecordingQuality summary={displayed.quality} loadedAt={displayed.loadedAt} stale={!!failure} monitoring={autoRefresh} {refreshing} />
 		</section>
-		<div class="min-w-0 lg:col-span-4 lg:row-span-4">
+		<div class="min-w-0 lg:col-span-4 lg:row-span-6">
 			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />
+			<div class="mt-14 space-y-5">
+				<RecordingQuality summary={displayed.quality} loadedAt={displayed.loadedAt} stale={!!failure} monitoring={autoRefresh} {refreshing} />
+				<RecordingQuality summary={gyroQuality} title="Gyro session quality" label="Current gyro session" loadedAt={gyroSession.loadedAt} stale={!!gyroSession.error && gyroSession.hasLoaded} monitoring={autoRefresh} refreshing={gyroSession.busy} />
+			</div>
 		</div>
 		<div class="min-w-0 lg:col-span-8">
-			<GyroEnergy monitoring={autoRefresh} refreshRequest={gyroRefreshRequest} />
+			<GyroEnergy monitoring={autoRefresh} refreshRequest={gyroRefreshRequest} bind:session={gyroSession} />
+		</div>
+		<div class="min-w-0 lg:col-span-8">
+			<RepCounter readings={imuReadings} sets={repSets} {assessments} bind:templates bind:offsetSeconds={clockOffset} bind:muscle={setMuscle} />
+		</div>
+		<div class="min-w-0 lg:col-span-8">
+			<HeartRecovery sets={repSets} latestPulse={displayed.readings[0]} refreshRequest={gyroRefreshRequest} offsetSeconds={clockOffset} pulseRate={displayed.pulseRate} bind:history={recoveries} />
 		</div>
 		<!-- <section class="min-w-0 lg:col-span-8" aria-labelledby="pulse-frequency-title">
 			<h2 id="pulse-frequency-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Pulse</span> <span class="outline-text">frequency</span></h2>
@@ -186,61 +197,6 @@
 			<EmgAnalysis throughId={displayed.readings[0]?.id} connectionError={failure} onresult={(result) => { emgResult = result; }} onstate={(state) => { emgState = state; }} />
 		</div>
 	</div>
-
-	<section class="mt-20" aria-labelledby="readings-title">
-		<div class="flex flex-wrap items-end justify-between gap-4">
-			<div>
-				<h2 id="readings-title" class="display text-[28px] md:text-[32px]"><span class="text-lime">Readings</span> <span class="outline-text">log</span></h2>
-				<p class="mt-3 text-[15px] text-muted">{displayed.readings.length ? `The last ${displayed.readings.length} records, newest first. Search covers these records only.` : 'Every reading is listed here, newest first.'}</p>
-			</div>
-			<label class="relative block w-full sm:w-72">
-				<span class="sr-only">Search readings</span>
-				<Search class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" size={18} />
-				<input class="min-h-11 w-full border border-white/45 bg-night pr-3 pl-10 text-[16px] text-white placeholder:text-muted" type="search" placeholder="Record, time or value" bind:value={search} oninput={() => page = 0} />
-			</label>
-		</div>
-		{#if visible.length}
-			<div class="mt-5 overflow-x-auto">
-				<table class="w-full border-collapse text-left text-[15px] whitespace-nowrap tabular-nums">
-					<thead class="label text-lime">
-						<tr class="border-b border-lime">
-							<th scope="col" class="py-3 pr-3 sm:pr-6 font-bold">Record</th>
-							<th scope="col" class="py-3 pr-3 sm:pr-6 font-bold"><span class="sm:hidden">Time</span><span class="hidden sm:inline">Recorded at</span></th>
-							<th scope="col" class="py-3 pr-3 sm:pr-6 text-right font-bold">EKG</th>
-							<th scope="col" class="py-3 pr-3 sm:pr-6 text-right font-bold">EMG</th>
-							<th scope="col" class="py-3 text-right font-bold">Pulse</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each visible as row (row.id)}
-							<tr class={['border-b border-rule', freshAfter !== null && row.id > freshAfter && 'fresh']}>
-								<td class="py-3 pr-3 sm:pr-6 text-muted">{row.id}</td>
-								<td class="py-3 pr-3 sm:pr-6"><span class="sm:hidden">{time(row.created_at)}</span><span class="hidden sm:inline">{date(row.created_at)}</span></td>
-								<td class="py-3 pr-3 sm:pr-6 text-right font-semibold">{@render value(row.ekg)}</td>
-								<td class="py-3 pr-3 sm:pr-6 text-right font-semibold">{@render value(row.emg)}</td>
-								<td class="py-3 text-right font-semibold">{@render value(row.puls)}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		{:else}
-			<div class="py-12">
-				<p class="display text-[20px]">{search ? 'No matching readings' : failure ? 'No readings loaded' : 'No readings yet'}</p>
-				<p class="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-muted">{search ? 'Try another record number, time or value.' : failure ? 'Readings are listed here once the connection is back.' : 'Start recording on your sensor. If readings still don’t appear, check that the table allows SELECT for the publishable key.'}</p>
-			</div>
-		{/if}
-		{#if filtered.length}
-			<div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-[14px] text-muted tabular-nums">
-				<p>{currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, filtered.length)} of {filtered.length} loaded readings</p>
-				<div class="flex items-center gap-2">
-					<button class="btn btn-line px-0" aria-label="Previous page" disabled={currentPage === 0} onclick={() => page = currentPage - 1}><ChevronLeft size={20} /></button>
-					<span class="min-w-16 text-center">{currentPage + 1} of {pages}</span>
-					<button class="btn btn-line px-0" aria-label="Next page" disabled={currentPage >= pages - 1} onclick={() => page = currentPage + 1}><ChevronRight size={20} /></button>
-				</div>
-			</div>
-		{/if}
-	</section>
 
 	<footer class="label mt-20 flex flex-wrap justify-between gap-x-6 gap-y-2 border-t border-rule pt-6 text-muted">
 		<p class="flex items-center gap-3"><span class="whitespace-nowrap text-white">Pocket G</span><span aria-hidden="true" class="h-4 w-0.5 bg-lime"></span>Read-only data from public.ekgemgpuls</p>
@@ -273,7 +229,6 @@
 			.pulse-band { --drift-x: -40%; animation-range: 0 100vh; }
 		}
 	}
-	.fresh { animation: fresh 1600ms ease-out; }
 
 	/* Text rises from behind its own bottom edge: the clip shrinks as fast as the line moves up. */
 	@keyframes rise {
@@ -295,5 +250,4 @@
 		24% { scale: 1; }
 		36% { scale: 1.25; }
 	}
-	@keyframes fresh { from { background-color: color-mix(in srgb, var(--color-lime) 22%, transparent); } }
 </style>

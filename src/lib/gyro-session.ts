@@ -1,8 +1,8 @@
-import type { GyroReading } from './gyro-energy.ts';
+import type { ImuReading } from './gyro-energy.ts';
 import type { GyroSnapshot } from './gyro-readings.ts';
 
 export type GyroSessionState = {
-	readings: GyroReading[]; throughId: number; baselineId: number | null;
+	readings: ImuReading[]; throughId: number; baselineId: number | null;
 	busy: boolean; resetting: boolean; error: string; loadedAt: string; hasLoaded: boolean;
 };
 export const initialGyroSession = (baselineId: number | null = null): GyroSessionState => ({

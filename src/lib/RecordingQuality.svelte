@@ -12,14 +12,14 @@
 	let interruptions = $derived(summary.recordGapCount + summary.pauseCount);
 </script>
 
-<section class="mt-5 border border-rule bg-night p-4 md:p-5" aria-labelledby={`${uid}-title`}>
+<section class="@container border border-rule bg-night p-4 md:p-5" aria-labelledby={`${uid}-title`}>
 	<div class="flex flex-wrap items-baseline justify-between gap-2">
 		<h3 id={`${uid}-title`} class="display text-[20px]">{title}</h3>
 		<p class="label text-muted">{label}</p>
 	</div>
 	<p class="mt-3 text-[13px] leading-relaxed text-muted">{summary.rowCount.toLocaleString('en-GB')} loaded samples{summary.captureDurationSeconds !== null ? ` · ${number(summary.captureDurationSeconds)} s capture span` : ''}. Coverage describes available values in these rows.</p>
 	{#if summary.rowCount}
-		<div class="mt-4 grid gap-4 sm:grid-cols-3">
+		<div class="mt-4 grid gap-4 @lg:grid-cols-3">
 			{#each summary.channels as channel (channel.key)}
 				<div>
 					<p class="label text-muted">{channel.name}</p>
