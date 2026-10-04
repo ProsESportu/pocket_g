@@ -29,8 +29,8 @@ test('normal outputs are excluded exactly; fragments and comparisons remain lite
 		score('ACUTE', .9), score('ST MORE DEPRESSED IN', .9), score('BORDERLINE ECG', .9)]));
 	const notes = ecgCoachNotes(input, []);
 	assert.equal(notes.length, 3);
-	for (const note of notes) assert.match(note.text, /Unvalidated.*requires clinical context.*no previous recording was compared/);
-	assert.ok(notes.some((note) => note.text.includes('ECG model output: ACUTE —')));
+	for (const note of notes) assert.match(note.text, /not a diagnosis.*no earlier recording was compared/);
+	assert.ok(notes.some((note) => note.text.includes('ECG model flagged “ACUTE”')));
 	assert.ok(notes.some((note) => note.text.includes('ST MORE DEPRESSED IN')));
 });
 
@@ -39,7 +39,7 @@ test('notes clip strip links to the visible overlap, retain timestamps, and labe
 	const [note] = ecgCoachNotes(input, [{ id: 220 }, { id: 200 }, { id: 190 }, { id: 99 }], true);
 	assert.equal(note.fromId, 190); assert.equal(note.toId, 200);
 	assert.equal(note.from, input.window.startedAt); assert.equal(note.to, input.window.endedAt);
-	assert.match(note.text, /^Stale snapshot.*records 100–200/);
+	assert.match(note.text, /^Older result\. ECG model flagged/);
 	assert.equal(ecgCoachNotes(input, [{ id: 300 }])[0].fromId, undefined);
 	assert.equal(ecgCoachNotes(input, [{ id: 300 }])[0].toId, undefined);
 });

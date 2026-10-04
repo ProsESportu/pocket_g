@@ -68,7 +68,7 @@ function summarize<T extends TimedRow>(input: readonly T[], channels: { key: str
 /** Coverage is relative to fetched rows, not an estimate of all sensor packets produced. */
 export function recordingQuality(readings: readonly Reading[]): RecordingQualitySummary {
 	return summarize(readings, [
-		{ key: 'ekg', name: 'EKG', valid: (row) => finite(row.ekg) },
+		{ key: 'ekg', name: 'ECG', valid: (row) => finite(row.ekg) },
 		{ key: 'emg', name: 'EMG', valid: (row) => finite(row.emg) },
 		{ key: 'puls', name: 'Pulse', valid: (row) => finite(row.puls) }
 	]);
@@ -76,7 +76,7 @@ export function recordingQuality(readings: readonly Reading[]): RecordingQuality
 
 /** Gyro eligibility is independent of mass and pivot settings. Stationary samples remain valid. */
 export function gyroRecordingQuality(readings: readonly GyroReading[]): RecordingQualitySummary {
-	return summarize(readings, [{ key: 'gyro', name: 'Gyro', valid: (row) =>
+	return summarize(readings, [{ key: 'gyro', name: 'Motion', valid: (row) =>
 		finite(row.gyro_x) && finite(row.gyro_y) && finite(row.gyro_z) && finite(captureMilliseconds(row.created_at))
 	}], GYRO.maxGapSeconds);
 }

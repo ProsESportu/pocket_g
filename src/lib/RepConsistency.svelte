@@ -12,16 +12,15 @@
 
 <section class="mt-6 border-t border-rule pt-5" aria-labelledby="rep-consistency-title">
 	<h3 id="rep-consistency-title" class="display text-[22px]">Rep consistency</h3>
-	<p class="mt-2 text-[14px] leading-relaxed text-muted">Timing between detected repetitions in this analyzed snapshot. Lower timing variation means more consistent timing.</p>
+	<p class="mt-2 text-[14px] leading-relaxed text-muted">Time between reps. Lower variation means a steadier pace.</p>
 	{#if timing.status === 'unavailable'}
 		<p class="mt-3 text-[14px] text-muted">{timing.reason}</p>
 	{:else}
 		<div class="mt-4 flex flex-wrap gap-x-8 gap-y-3 tabular-nums">
-			<div><p class="label text-muted">Median interval</p><p class="mt-1 text-[23px] font-semibold">{timing.medianSeconds.toFixed(2)} <span class="text-[14px] text-muted">s</span></p></div>
-			<div><p class="label text-muted">Timing variation</p><p class="mt-1 text-[23px] font-semibold">{timing.variationPercent.toFixed(1)}<span class="text-[14px] text-muted">%</span></p></div>
+			<div><p class="label text-muted">Median gap</p><p class="mt-1 text-[23px] font-semibold">{timing.medianSeconds.toFixed(2)} <span class="text-[14px] text-muted">s</span></p></div>
+			<div><p class="label text-muted">Variation</p><p class="mt-1 text-[23px] font-semibold">{timing.variationPercent.toFixed(1)}<span class="text-[14px] text-muted">%</span></p></div>
 		</div>
-		<p class="mt-3 text-[12px] text-muted">Population standard deviation ÷ mean interval × 100. These timings describe detected peaks, with no assessment of fatigue or technique.</p>
-		<p class="mt-4 text-[12px] text-muted tabular-nums">Interval (seconds) · zero baseline · <span class="text-lime">dashed line: median {timing.medianSeconds.toFixed(2)} s</span></p>
+		<p class="mt-4 text-[12px] text-muted tabular-nums">Seconds between reps · <span class="text-lime">dashed line: median {timing.medianSeconds.toFixed(2)} s</span></p>
 		<div class="mt-2 overflow-x-auto pb-2">
 			<div class="w-full min-w-fit">
 				<div class="relative h-[180px] border-b border-rule bg-night">
@@ -42,7 +41,7 @@
 				</div>
 			</div>
 		</div>
-		<p class="mt-1 text-[12px] text-muted">0 s baseline · rep pair along the horizontal axis. Hover, tap, or focus a bar for its timing.</p>
+		<p class="mt-1 text-[12px] text-muted">Hover or tap a bar for its timing.</p>
 		<p class="mt-3 min-h-10 border-l-2 border-lime bg-raised px-3 py-2 text-[14px] tabular-nums" role="status">
 			{#if selected}<strong>{selected.fromRep} → {selected.toRep}</strong>: {selected.seconds.toFixed(2)} s · {deviation(selected.medianDeviationPercent)} compared with the median{/if}
 		</p>

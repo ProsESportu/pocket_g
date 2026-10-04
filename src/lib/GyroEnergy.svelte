@@ -29,7 +29,7 @@
 	function persist() {
 		if (!mounted) return;
 		try { sessionStorage.setItem(GYRO_STORAGE_KEY, serializeGyroSession(settings, session.baselineId)); }
-		catch { storageError = 'Tab storage is unavailable. Settings and the reset boundary will be lost when you reload.'; }
+		catch { storageError = 'This browser blocks storage, so your settings reset when you reload.'; }
 	}
 	function checkConfiguration() {
 		if (!env.PUBLIC_SUPABASE_URL || !env.PUBLIC_SUPABASE_PUBLISHABLE_KEY) throw new Error('Configure the Supabase URL and publishable key to load gyro readings.');
@@ -37,7 +37,7 @@
 	onMount(() => {
 		let saved: string | null = null;
 		try { saved = sessionStorage.getItem(GYRO_STORAGE_KEY); }
-		catch { storageError = 'Tab storage is unavailable. Settings and the reset boundary will be lost when you reload.'; }
+		catch { storageError = 'This browser blocks storage, so your settings reset when you reload.'; }
 		const restored = restoreGyroSession(saved);
 		settings = restored.settings;
 		massInput = settings.massKg ?? undefined;
@@ -73,9 +73,9 @@
 
 	function applySettings(event: SubmitEvent) {
 		event.preventDefault();
-		if (!positiveFinite(massInput)) { inputError = 'Enter a finite, positive mass in kilograms.'; return; }
-		if (!positiveFinite(elbowInput) || !positiveFinite(shoulderInput)) { inputError = 'Both pivot distances must be finite and greater than zero.'; return; }
-		if (!Number.isFinite(0.5 * massInput * (Math.max(elbowInput, shoulderInput) / 100) ** 2)) { inputError = 'Mass or distance is too large to calculate energy.'; return; }
+		if (!positiveFinite(massInput)) { inputError = 'Enter the weight in kilograms, above zero.'; return; }
+		if (!positiveFinite(elbowInput) || !positiveFinite(shoulderInput)) { inputError = 'Both distances must be above zero.'; return; }
+		if (!Number.isFinite(0.5 * massInput * (Math.max(elbowInput, shoulderInput) / 100) ** 2)) { inputError = 'That weight or distance is too large to calculate.'; return; }
 		settings = { ...settings, massKg: massInput, elbowCm: elbowInput, shoulderCm: shoulderInput };
 		inputError = '';
 		persist();
@@ -89,20 +89,20 @@
 <section class="min-w-0" aria-labelledby={`${uid}-title`}>
 	<div class="flex flex-wrap items-baseline gap-x-4 gap-y-2">
 		<h2 id={`${uid}-title`} class="display text-[28px] md:text-[32px]"><span class="text-lime">Movement</span> <span class="outline-text">energy</span></h2>
-		<span class="label border border-lime px-2 py-1 text-lime">Estimate · Gyro</span>
+		<span class="label border border-lime px-2 py-1 text-lime">Estimate</span>
 	</div>
-	<p class="mt-3 text-[15px] leading-relaxed text-muted">Estimated positive kinetic work from your MPU6050 gyro readings. Enter the mass you are moving and choose its pivot.</p>
+	<p class="mt-3 text-[15px] leading-relaxed text-muted">How much work your arm puts into the weight. Enter the weight in your hand and the joint you’re moving around. This isn’t calories burned.</p>
 	<div class="relative mt-5 border border-rule bg-night p-5 md:p-6">
 		<form onsubmit={applySettings} novalidate>
 			<div class="flex flex-wrap items-end gap-3">
 				<label class="block min-w-0 flex-1 sm:max-w-64">
-					<span class="label mb-2 block text-muted">Mass moved (kg)</span>
+					<span class="label mb-2 block text-muted">Weight in your hand (kg)</span>
 					<input class="min-h-11 w-full border border-white/45 bg-night px-3 text-[16px] text-white" type="number" inputmode="decimal" step="any" min="0" required placeholder="e.g. 5" bind:value={massInput} aria-invalid={!!inputError && !positiveFinite(massInput)} aria-describedby={inputError ? `${uid}-input-error` : undefined} />
 				</label>
 				<button type="submit" class="btn btn-lime">Apply settings</button>
 			</div>
 			<fieldset class="mt-6">
-				<legend class="label mb-3 text-muted">Movement pivot</legend>
+				<legend class="label mb-3 text-muted">Joint you move around</legend>
 				<div class="grid grid-cols-2 gap-3">
 					{#each ['elbow', 'shoulder'] as pivot (pivot)}
 						<label class={['pivot-choice btn min-w-0 flex-wrap gap-x-2 px-2 py-3', settings.pivot === pivot ? 'btn-lime' : 'btn-line']}>
@@ -114,42 +114,41 @@
 				</div>
 			</fieldset>
 			<details class="mt-5 border-t border-rule pt-4">
-				<summary class="text-[14px] font-semibold">Calculation settings</summary>
-				<p class="mt-3 text-[14px] leading-relaxed text-muted">Distance from the pivot to the load. Defaults: 35 cm from elbow to load; 65 cm from shoulder to load (30 cm upper arm + 35 cm). Adjust both here, then apply settings.</p>
+				<summary class="text-[14px] font-semibold">Energy settings</summary>
+				<p class="mt-3 text-[14px] leading-relaxed text-muted">Distance from the joint to the weight. Defaults: 35 cm from elbow to hand; 65 cm from shoulder to hand (30 cm upper arm + 35 cm). Adjust both here, then apply settings.</p>
 				<div class="mt-4 grid gap-4 sm:grid-cols-2">
 					<label class="block"><span class="label mb-2 block text-muted">Elbow distance (cm)</span><input class="min-h-11 w-full border border-white/45 bg-night px-3 text-[16px]" type="number" inputmode="decimal" step="any" min="0" required bind:value={elbowInput} /></label>
 					<label class="block"><span class="label mb-2 block text-muted">Shoulder distance (cm)</span><input class="min-h-11 w-full border border-white/45 bg-night px-3 text-[16px]" type="number" inputmode="decimal" step="any" min="0" required bind:value={shoulderInput} /></label>
 				</div>
-				<p class="mt-4 text-[13px] leading-relaxed text-muted">The MPU6050 sends degrees per second (its axes clip at ±{GYRO.sensorLimitDegrees} °/s); readings are converted to rad/s. Smoothing: 0.25 s. Rest threshold: 0.05 rad/s (2.9 °/s). These are engineering assumptions, not calibrated sensor measurements.</p>
+				<p class="mt-4 text-[13px] leading-relaxed text-muted">Assumes the weight moves in a circle around the selected joint, with the sensor rotating with it. Uses ½ × mass × distance² × angular speed² and adds only increases between smoothed samples. Gravitational work and metabolic expenditure are excluded.</p>
+				<p class="mt-2 text-[13px] leading-relaxed text-muted">The motion sensor sends degrees per second (its axes clip at ±{GYRO.sensorLimitDegrees} °/s); readings are converted to rad/s. Smoothing: 0.25 s. Rest threshold: 0.05 rad/s (2.9 °/s). These are engineering assumptions, not calibrated sensor measurements.</p>
 			</details>
 			{#if inputError}<p id={`${uid}-input-error`} class="mt-4 text-[15px] text-lime" role="alert">{inputError}</p>{/if}
 		</form>
 		<div class="mt-6 border-t border-rule pt-6" aria-busy={session.busy}>
-			<p class="label text-muted">Estimated positive kinetic work</p>
+			<p class="label text-muted">Work done lifting</p>
 			{#if canShowEnergy}
 				<p class="mt-3 flex flex-wrap items-baseline gap-3 leading-none"><span class="text-[clamp(44px,8vw,76px)] font-extrabold tracking-tight tabular-nums">{number(energy.workJ)}</span><span class="display text-[24px] text-lime">J</span></p>
-				<p class="mt-4 text-[15px] text-muted">Latest kinetic energy: <strong class="text-white tabular-nums">{energy.latestKineticJ === null ? 'Unavailable' : `${number(energy.latestKineticJ)} J`}</strong></p>
-				<p class="mt-2 text-[14px] text-muted">{number(settings.massKg!)} kg · {settings.pivot === 'elbow' ? 'Elbow' : 'Shoulder'} pivot · {number(distance)} cm. Switching pivots recalculates this entire session.</p>
+				<p class="mt-4 text-[15px] text-muted">Energy of the weight right now: <strong class="text-white tabular-nums">{energy.latestKineticJ === null ? 'Unavailable' : `${number(energy.latestKineticJ)} J`}</strong></p>
+				<p class="mt-2 text-[14px] text-muted">{number(settings.massKg!)} kg · {settings.pivot === 'elbow' ? 'Elbow' : 'Shoulder'} joint · {number(distance)} cm. Switching joints recalculates the whole count.</p>
 			{:else}
-				<p class="mt-3 text-[20px] font-semibold">{settings.massKg === null ? 'Enter the mass to calculate energy.' : !session.hasLoaded ? 'Waiting for gyro readings.' : energy.reason}</p>
+				<p class="mt-3 text-[20px] font-semibold">{settings.massKg === null ? 'Enter the weight in your hand to see the energy.' : !session.hasLoaded ? 'Waiting for the motion sensor.' : energy.reason}</p>
 			{/if}
 			{#if session.hasLoaded}
-				<p class="mt-4 text-[14px] leading-relaxed text-muted">{energy.status === 'unset' ? `${session.readings.length.toLocaleString('en-GB')} gyro rows loaded.` : `${energy.sampleCount.toLocaleString('en-GB')} analyzed samples · ${number(energy.durationSeconds)} s of continuous motion data · ${energy.segmentCount} segment${energy.segmentCount === 1 ? '' : 's'}.`}</p>
-				{#if energy.firstRecordId !== null}<p class="mt-2 text-[13px] leading-relaxed text-muted">Records {energy.firstRecordId}–{energy.lastRecordId} · {time(energy.startedAt)}–{time(energy.endedAt)} (Warsaw).</p>{/if}
-				{#if energy.skippedCount}<p class="mt-2 text-[13px] text-muted">Skipped {energy.skippedCount} unusable sample{energy.skippedCount === 1 ? '' : 's'}; energy is never added across gaps.</p>{/if}
-				{#if !session.readings.length}<p class="mt-2 text-[14px] text-muted">{session.baselineId === null ? 'No gyro readings yet. Start recording on your sensor.' : 'Session reset. Waiting for readings after the reset boundary.'}</p>{/if}
+				{#if energy.status === 'unset' && session.readings.length}<p class="mt-4 text-[14px] text-muted">{session.readings.length.toLocaleString('en-GB')} motion readings received.</p>{/if}
+				{#if !session.readings.length}<p class="mt-4 text-[14px] text-muted">{session.baselineId === null ? 'No motion readings yet. Start recording on the motion sensor.' : 'Count reset. Waiting for new movement.'}</p>{/if}
 			{/if}
-			<p class="mt-4 text-[14px] text-muted" role="status">{session.resetting ? 'Resetting the local session…' : session.busy ? `Loading gyro readings${session.hasLoaded ? '; showing the last completed snapshot' : ''}…` : !monitoring ? 'Monitoring paused. Use Refresh now to load new gyro readings.' : session.error ? 'Gyro refresh failed. Retrying with live updates.' : session.loadedAt ? `Updated ${time(session.loadedAt)}.` : 'Waiting for gyro readings.'}</p>
-			{#if session.error}<p class="mt-3 flex gap-2 text-[15px] leading-relaxed" role="alert"><TriangleAlert size={18} class="mt-0.5 shrink-0 text-lime" /><span>{session.hasLoaded ? 'Stale snapshot. ' : ''}{session.error}</span></p>{/if}
+			<!-- Loads run every second, so a reload over existing data keeps showing the last update instead of flickering. -->
+			<p class="mt-4 text-[14px] text-muted" role="status">{session.resetting ? 'Resetting…' : session.busy && !session.hasLoaded ? 'Loading motion readings…' : !monitoring ? 'Paused. Use Refresh now to load new readings.' : session.error ? 'Couldn’t update. Retrying…' : session.loadedAt ? `Updated ${time(session.loadedAt)}.` : 'Waiting for the motion sensor.'}</p>
+			{#if session.error}<p class="mt-3 flex gap-2 text-[15px] leading-relaxed" role="alert"><TriangleAlert size={18} class="mt-0.5 shrink-0 text-lime" /><span>{session.hasLoaded ? 'Showing the last result. ' : ''}{session.error}</span></p>{/if}
 		</div>
 		{#if canShowEnergy}<EnergySets sets={energy.sets} />{/if}
 		<div class="mt-6 border-t border-rule pt-5">
-			<button class="btn btn-line w-full sm:w-auto" type="button" disabled={!mounted || session.resetting} onclick={() => controller?.reset()}><RotateCcw size={17} />Reset energy session</button>
-			<p class="mt-3 text-[13px] leading-relaxed text-muted">Starts counting future readings in this tab. Supabase history is preserved; mass and pivot settings stay selected. Settings and the reset survive reloads in this tab.</p>
+			<button class="btn btn-line w-full sm:w-auto" type="button" disabled={!mounted || session.resetting} onclick={() => controller?.reset()}><RotateCcw size={17} />Start a fresh count</button>
+			<p class="mt-3 text-[13px] leading-relaxed text-muted">Counts only movement from now on. Your weight and joint stay set.</p>
 			{#if storageError}<p class="mt-3 text-[13px] text-lime" role="status">{storageError}</p>{/if}
 		</div>
 	</div>
-	<p class="mt-4 text-[13px] leading-relaxed text-muted">Assumes the load moves in a circle around the selected pivot, with the gyro rotating with it. Uses ½ × mass × distance² × angular speed² and adds only increases between smoothed samples. Gravitational work and metabolic expenditure are excluded; this estimate is not calories burned.</p>
 </section>
 
 <style>

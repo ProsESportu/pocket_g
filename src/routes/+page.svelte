@@ -65,6 +65,11 @@
 		const bpm = data.pulse.status === 'ready' ? Math.round(data.pulse.bpm ?? 0) : 0;
 		return status === 'Live' && bpm >= 30 && bpm <= 220 ? `${(60 / bpm).toFixed(3)}s` : null;
 	});
+	const STEPS = [
+		{ title: 'Wear the sensors', text: 'Put on the ECG, EMG and pulse sensors and the motion sensor on your forearm. Your signals appear within a few seconds.' },
+		{ title: 'Teach your exercise', text: 'Under Your reps, name it, press Start teaching and do 3–5 clean reps, then save.' },
+		{ title: 'Train', text: 'Reps are counted and compared with your example. Heart recovery records itself for a minute after each set.' }
+	];
 	const date = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
 	const time = (value: string) => new Intl.DateTimeFormat('en-GB', { timeStyle: 'medium', timeZone: 'Europe/Warsaw' }).format(new Date(value));
 	onMount(() => {
@@ -103,7 +108,7 @@
 
 <svelte:head>
 	<title>Pocket G</title>
-	<meta name="description" content="Live EKG, EMG and pulse readings with sensor checks while you train." />
+	<meta name="description" content="Live ECG, EMG, pulse and rep tracking while you train." />
 </svelte:head>
 
 <header class="border-b border-rule">
@@ -123,10 +128,13 @@
 				{#if autoRefresh}<Pause size={18} />{:else}<Play size={18} />{/if}
 				<span class="sr-only md:not-sr-only">{autoRefresh ? 'Pause monitoring' : 'Resume monitoring'}</span>
 			</button>
-			<button class="btn btn-line px-3 md:px-4" onclick={() => refresh(true)}>
-				<RefreshCw size={18} />
-				<span class="sr-only md:not-sr-only">Refresh now</span>
-			</button>
+			<!-- Live updates already refresh every second, so the manual refresh only matters while paused. -->
+			{#if !autoRefresh}
+				<button class="btn btn-line px-3 md:px-4" onclick={() => refresh(true)}>
+					<RefreshCw size={18} />
+					<span class="sr-only md:not-sr-only">Refresh now</span>
+				</button>
+			{/if}
 		</div>
 	</div>
 </header>
@@ -141,7 +149,7 @@
 			<span aria-hidden="true" class="drift -mt-[0.08em] block" style:--drift="-0.3em" style:--fade={0.5}><span class="rise outline-text block" style:--i={2}>Session</span></span>
 			<span class="rise -mt-[0.08em] block text-lime" style:--i={3.5}>Session</span>
 		</h1>
-		<p class="mt-6 max-w-[52ch] text-[16px] leading-relaxed text-muted">{displayed.readings.length ? `Your last 10 seconds of readings, in Warsaw time. Each trace has its own scale, so compare a signal with itself rather than with the others.` : 'Your EKG, EMG and pulse appear here as readings arrive, in Warsaw time.'}</p>
+		<p class="mt-6 max-w-[52ch] text-[16px] leading-relaxed text-muted">Pocket G reads your heart, muscle and arm movement while you lift. Put on the sensor board and the forearm motion sensor, then start curling. Everything below updates live.</p>
 	</div>
 	<div class="hero-panel relative bg-panel lg:col-span-2 lg:col-start-3">
 		<svg class="edge-line absolute inset-0 hidden h-full w-full lg:block" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="16" y1="0" x2="0" y2="100" stroke="var(--color-lime)" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>
@@ -159,20 +167,35 @@
 	{#if failure}
 		<div class="mb-10 flex gap-3 border-l-2 border-lime bg-raised px-4 py-3 text-[15px] leading-relaxed" role="alert">
 			<TriangleAlert class="mt-0.5 shrink-0 text-lime" size={20} />
-			<p>{failure} {lastSuccess ? `Showing readings from ${time(lastSuccess.loadedAt)}.` : ''} {autoRefresh ? 'Retrying every 5 seconds.' : 'Refresh now, or resume live updates to retry.'}</p>
+			<p>{failure} {lastSuccess ? `Showing readings from ${time(lastSuccess.loadedAt)}.` : ''} {autoRefresh ? 'Retrying every second.' : 'Refresh now, or resume live updates to retry.'}</p>
 		</div>
 	{/if}
+	<section class="mb-14 border-b border-rule pb-12" aria-labelledby="steps-title">
+		<h2 id="steps-title" class="label text-muted">How it works</h2>
+		<ol class="mt-5 grid gap-8 md:grid-cols-3">
+			{#each STEPS as step, index (step.title)}
+				<li class="flex gap-4">
+					<span aria-hidden="true" class="display text-[44px] text-lime">{index + 1}</span>
+					<div>
+						<p class="display text-[18px]">{step.title}</p>
+						<p class="mt-2 text-[15px] leading-relaxed text-muted">{step.text}</p>
+					</div>
+				</li>
+			{/each}
+		</ol>
+	</section>
 	<!-- Coach notes and both quality panels share the right column beside the main panels. -->
 	<div class="grid items-start gap-x-8 gap-y-14 lg:grid-cols-12">
 		<section class="min-w-0 lg:col-span-8" aria-labelledby="signals-title">
 			<h2 id="signals-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Your</span> <span class="outline-text">signals</span></h2>
+			<p class="-mt-2 mb-5 text-[15px] leading-relaxed text-muted">The last 10 seconds from your sensors. Each line has its own scale, so compare a signal with itself, not with the others.</p>
 			<SessionStrip readings={displayed.readings} heartRate={displayed.heartRate} {notes} {selectedNote} unavailable={!!failure} />
 		</section>
 		<div class="min-w-0 lg:col-span-4 lg:row-span-4">
-			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />
+			<CoachNotes {notes} bind:selected={selectedNote} />
 			<div class="mt-14 space-y-5">
-				<RecordingQuality summary={displayed.quality} loadedAt={displayed.loadedAt} stale={!!failure} monitoring={autoRefresh} {refreshing} />
-				<RecordingQuality summary={gyroQuality} title="Gyro session quality" label="Current gyro session" loadedAt={gyroSession.loadedAt} stale={!!gyroSession.error && gyroSession.hasLoaded} monitoring={autoRefresh} refreshing={gyroSession.busy} />
+				<RecordingQuality summary={displayed.quality} label="Sensor board" loadedAt={displayed.loadedAt} stale={!!failure} monitoring={autoRefresh} {refreshing} />
+				<RecordingQuality summary={gyroQuality} label="Motion sensor" loadedAt={gyroSession.loadedAt} stale={!!gyroSession.error && gyroSession.hasLoaded} monitoring={autoRefresh} refreshing={gyroSession.busy} />
 			</div>
 		</div>
 		<div class="min-w-0 lg:col-span-8">
@@ -184,12 +207,6 @@
 		<div class="min-w-0 lg:col-span-8">
 			<HeartRecovery sets={repSets} latestPulse={displayed.readings[0]} refreshRequest={gyroRefreshRequest} offsetSeconds={clockOffset} pulseRate={displayed.pulseRate} bind:history={recoveries} />
 		</div>
-		<!-- <section class="min-w-0 lg:col-span-8" aria-labelledby="pulse-frequency-title">
-			<h2 id="pulse-frequency-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Pulse</span> <span class="outline-text">frequency</span></h2>
-			<div class="border border-rule bg-night p-5 md:p-6">
-				<PulseFrequency result={data.pulse} refreshError={failure} {refreshing} frequency />
-			</div>
-		</section> -->
 		<!-- The ECG and EMG checks sit side by side across the full width, below the right column. -->
 		<div class="grid min-w-0 gap-x-8 gap-y-14 lg:col-span-12 lg:grid-cols-2">
 			<EcgAnalysis window={displayed.ecg} connectionError={failure} onresult={(result) => { ecgResult = result; }} onstate={(state) => { ecgState = state; }} />
@@ -198,7 +215,7 @@
 	</div>
 
 	<footer class="label mt-20 flex flex-wrap justify-between gap-x-6 gap-y-2 border-t border-rule pt-6 text-muted">
-		<p class="flex items-center gap-3"><span class="whitespace-nowrap text-white">Pocket G</span><span aria-hidden="true" class="h-4 w-0.5 bg-lime"></span>Read-only data from public.ekgemgpuls</p>
+		<p class="flex items-center gap-3"><span class="whitespace-nowrap text-white">Pocket G</span><span aria-hidden="true" class="h-4 w-0.5 bg-lime"></span>All times in Warsaw time</p>
 		<p class="tabular-nums">{displayed.loadedAt ? `Last fetched ${date(displayed.loadedAt)}` : 'Waiting for the first connection'}</p>
 	</footer>
 </main>

@@ -100,7 +100,7 @@ test('coach notes identify experimental snapshot, clip links to visible overlap,
     const result = emgResult(info, { status: 'ready', triggerRep: 3 });
     const readings = [39999, 40000, 40001].map((id) => ({ id }));
     const [note] = emgCoachNote(result, readings);
-    assert.match(note.text, /Experimental.*records 20001–40000.*unvalidated.*Newer/);
+    assert.match(note.text, /fatigue at rep 3\. Experimental and unvalidated.*Newer readings.*Analyze EMG again/);
     assert.equal(note.fromId, 39999);
     assert.equal(note.toId, 40000);
     assert.equal(note.from, info.startedAt);

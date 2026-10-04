@@ -110,19 +110,20 @@
 		<h2 id={`${uid}-title`} class="display text-[28px] md:text-[32px]"><span class="text-mint">Heart</span> <span class="outline-text">recovery</span></h2>
 		<span class="label border border-mint px-2 py-1 text-mint">Pulse</span>
 	</div>
-	<p class="mt-3 text-[15px] leading-relaxed text-muted">How far your heart rate falls in the minute after a set: the first {RECOVERY.windowSeconds} seconds compared with the {RECOVERY.windowSeconds} seconds around one minute later. It starts by itself when a set ends; sit still while it records.</p>
+	<p class="mt-3 text-[15px] leading-relaxed text-muted">How far your heart rate falls in the minute after a set. It starts by itself when a set ends, so sit still while it records.</p>
 	<div class="relative mt-5 border border-rule bg-night p-5 md:p-6" aria-busy={busy}>
 		{#if live}
 			<p class="label text-mint" role="status">Recording after {live.label} · {left} s left</p>
 			<p class="mt-3 flex flex-wrap items-baseline gap-3 leading-none"><span class="text-[clamp(40px,7vw,64px)] font-extrabold tracking-tight tabular-nums">{bpm(live.startBpm)}</span><span class="display text-[20px] text-mint">BPM at start</span></p>
-			<p class="mt-3 text-[14px] text-muted">{live.elapsedSeconds < 1 ? 'Waiting for pulse readings after the set.' : live.startBpm === null && live.elapsedSeconds >= RECOVERY.windowSeconds ? 'No clear beats in the first 10 seconds yet. Keep the pulse sensor still.' : `Started ${time(live.startMs)} (Warsaw).`}</p>
+			<p class="mt-3 text-[14px] text-muted">{live.elapsedSeconds < 1 ? 'Waiting for pulse readings after the set.' : live.startBpm === null && live.elapsedSeconds >= RECOVERY.windowSeconds ? 'No clear beats in the first 10 seconds yet. Keep the pulse sensor still.' : `Started ${time(live.startMs)}.`}</p>
 		{:else if shown?.status === 'done'}
 			<p class="label text-mint">After {shown.label}</p>
 			<p class="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-2 leading-none tabular-nums">
 				<span class="text-[clamp(40px,7vw,64px)] font-extrabold tracking-tight">{shown.dropBpm! >= 0 ? '−' : '+'}{Math.abs(Math.round(shown.dropBpm!))}</span>
 				<span class="display text-[20px] text-mint">BPM in {RECOVERY.seconds} s</span>
 			</p>
-			<p class="mt-3 text-[15px] tabular-nums">{bpm(shown.startBpm)} → {bpm(shown.endBpm)} BPM <span class="text-muted">· started {time(shown.startMs)} (Warsaw)</span></p>
+			<p class="mt-3 text-[15px] tabular-nums">{bpm(shown.startBpm)} → {bpm(shown.endBpm)} BPM <span class="text-muted">· started {time(shown.startMs)}</span></p>
+			<p class="mt-2 text-[14px] text-muted">A bigger drop means your heart is settling faster.</p>
 		{:else if shown?.status === 'unavailable'}
 			<p class="label text-mint">After {shown.label}</p>
 			<p class="mt-3 text-[18px] font-semibold">Recovery couldn’t be measured.</p>
@@ -162,6 +163,6 @@
 		{#if history.length > (live ? 0 : 1)}
 			<p class="mt-4 text-[14px] text-muted tabular-nums">Earlier: {history.slice(0, live ? undefined : -1).toReversed().map((item) => `${item.label} ${item.status === 'done' ? `${item.dropBpm! >= 0 ? '−' : '+'}${Math.abs(Math.round(item.dropBpm!))}` : 'unclear'}`).join(' · ')}</p>
 		{/if}
-		<p class="mt-4 text-[13px] leading-relaxed text-muted">Start recovery now uses the newest pulse reading, so it needs no motion data. Automatic starts use the set’s end on the motion sensor, moved by the clock offset under Your reps › Calculation settings ({offsetSeconds} s). Results stay in this tab.</p>
+		<p class="mt-4 text-[13px] leading-relaxed text-muted">Compares the first {RECOVERY.windowSeconds} seconds after the set with the {RECOVERY.windowSeconds} seconds around one minute later. Results are kept only in this tab.</p>
 	</div>
 </section>

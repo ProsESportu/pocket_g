@@ -6,7 +6,6 @@
 	import { displayedSet, REPS, type RepSet } from './reps.ts';
 	import { buildTemplate, EXERCISE_STORAGE_KEY, EXERCISES, FLAG_LABEL, FORM, restoreExercises, serializeExercises,
 		type ExerciseTemplate, type SetAssessment } from './exercises.ts';
-	import { gyroRecordingQuality } from './recording-quality.ts';
 	import { loadSetEmg, muscleByRep, REP_EMG, setEmgWindow, type SetMuscle } from './rep-emg.ts';
 
 	let { readings, sets, assessments, templates = $bindable([]), offsetSeconds = $bindable(0), muscle = $bindable(null) }: {
@@ -23,7 +22,6 @@
 	let checks = $derived(new Map(assessment?.checks.map((check) => [check.rep, check]) ?? []));
 	// A newer set that is moving but hasn't counted a rep yet doesn't take over the panel.
 	let moving = $derived(sets.at(-1)?.status === 'ongoing' && sets.at(-1) !== shown);
-	let rate = $derived(gyroRecordingQuality(readings).observedRateHz);
 	let earlier = $derived(sets.filter((set) => set !== shown && set.reps.length).toReversed().slice(0, 5));
 	let selectedRep = $state<number | null>(null);
 	let selected = $derived(shown?.reps.find((rep) => rep.rep === selectedRep) ?? shown?.reps.at(-1) ?? null);
@@ -152,20 +150,20 @@
 <section class="min-w-0" aria-labelledby={`${uid}-title`}>
 	<div class="flex flex-wrap items-baseline gap-x-4 gap-y-2">
 		<h2 id={`${uid}-title`} class="display text-[28px] md:text-[32px]"><span class="text-lime">Your</span> <span class="outline-text">reps</span></h2>
-		<span class="label border border-lime px-2 py-1 text-lime">Motion{rate ? ` · ${number(rate)} Hz` : ''}</span>
+		<span class="label border border-lime px-2 py-1 text-lime">Motion</span>
 	</div>
 	<p class="mt-3 text-[15px] leading-relaxed text-muted">Reps, range and tempo from the forearm motion sensor. Teach an exercise once and later reps are named and compared with it.</p>
 	<div class="relative mt-5 border border-rule bg-night p-5 md:p-6">
 		{#if shown}
 			<p class="label text-lime">
-				{assessment?.status === 'matched' ? assessment.template!.name : assessment?.status === 'unknown' ? 'Unknown movement' : templates.length ? 'Recognising…' : 'Teach an exercise to name it'}
+				{assessment?.status === 'matched' ? assessment.template!.name : assessment?.status === 'unknown' ? 'Unknown movement' : templates.length ? 'Recognising…' : 'Teach an exercise below to name it'}
 				<span class="text-muted">{` · Set ${shown.set} · ${STATUS[shown.status]}`}</span>
 			</p>
 			<p class="mt-3 flex flex-wrap items-baseline gap-3 leading-none" role="status"><span class="text-[clamp(44px,8vw,76px)] font-extrabold tracking-tight tabular-nums">{shown.reps.length}</span><span class="display text-[24px] text-lime">{shown.reps.length === 1 ? 'rep' : 'reps'}</span></p>
 			<p class="mt-3 text-[14px] text-muted tabular-nums">
-				{#if assessment?.status === 'matched'}{number(assessment.distanceDeg!)}° from your example · {clean} of {shown.reps.length} reps match your taught {assessment.template!.name}
-				{:else if assessment?.status === 'unknown'}{assessment.distanceDeg === null ? 'No clear hinge in these reps.' : `The closest taught exercise is ${number(assessment.distanceDeg)}° away (limit ${EXERCISES.matchDegrees}°).`} Teach this exercise to get form checks.
-				{:else}{time(shown.startedAt)}–{time(shown.endedAt)} (Warsaw){/if}
+				{#if assessment?.status === 'matched'}{clean} of {shown.reps.length} reps match your taught {assessment.template!.name}
+				{:else if assessment?.status === 'unknown'}{assessment.distanceDeg === null ? 'No clear bending motion in these reps.' : 'Doesn’t match any taught exercise.'} Teach it below to get form checks.
+				{:else}{time(shown.startedAt)}–{time(shown.endedAt)}{/if}
 			</p>
 			{#if moving}<p class="mt-2 text-[14px] text-lime">Set {sets.at(-1)!.set} has started; no rep counted in it yet.</p>{/if}
 
@@ -190,7 +188,7 @@
 				{#if shown.status === 'ongoing'}<span class="text-muted">Muscle activity is added once the set ends.</span>
 				{:else if emgBusy}<span class="text-muted">Loading EMG for this set…</span>
 				{:else if emgError}<span class="text-lime">{emgError} It retries with the next motion update.</span>
-				{:else if shownMuscle}EMG found for <strong>{shownMuscle.covered} of {shownMuscle.reps.length}</strong> reps{shownMuscle.covered ? '' : '. Record EMG during the set, or check the motion clock offset under Calculation settings.'}{/if}
+				{:else if shownMuscle}EMG found for <strong>{shownMuscle.covered} of {shownMuscle.reps.length}</strong> reps{shownMuscle.covered ? '' : '. Record EMG during the set, or check the clock sync under Rep & clock sync settings.'}{/if}
 			</p>
 
 			<p class="label mt-6 text-muted">Range per rep (°)</p>
@@ -247,8 +245,8 @@
 		{/if}
 
 		<section class="mt-6 border-t border-rule pt-5" aria-labelledby={`${uid}-teach`}>
-			<h3 id={`${uid}-teach`} class="label text-lime">Taught exercises</h3>
-			<p class="mt-2 text-[13px] leading-relaxed text-muted">Do {EXERCISES.minTeachReps}–5 reps with good form. Later sets are named after the closest taught exercise and each rep is compared with it. Wear the sensor the same way as when teaching.</p>
+			<h3 id={`${uid}-teach`} class="label text-lime">Teach an exercise</h3>
+			<p class="mt-2 text-[13px] leading-relaxed text-muted">Type a name, press Start teaching, do {EXERCISES.minTeachReps}–5 reps with good form, then press Save exercise. Later sets are named after the closest taught exercise and each rep is compared with it. Wear the sensor the same way each time.</p>
 			{#if templates.length}
 				<ul class="mt-3 space-y-2">
 					{#each templates as template (template.id)}
@@ -281,7 +279,7 @@
 		</section>
 
 		<details class="mt-6 border-t border-rule pt-4">
-			<summary class="text-[14px] font-semibold">Calculation settings</summary>
+			<summary class="text-[14px] font-semibold">Rep &amp; clock sync settings</summary>
 			<ul class="mt-3 space-y-1 text-[13px] leading-relaxed text-muted">
 				<li>Angle: direction of gravity from the accelerometer, smoothed over {REPS.accSmoothingSeconds} s, relative to the rest just before the set.</li>
 				<li>A rep is a rise and fall of at least {REPS.minRangeDegrees}°, with tops at least {REPS.minRepSeconds} s apart. At about 5 Hz, reps faster than about 1 s may be missed.</li>
@@ -294,7 +292,7 @@
 				<span class="label mb-2 block text-muted">Motion clock ahead by (s)</span>
 				<input class="min-h-11 w-full border border-white/45 bg-night px-3 text-[16px] text-white" type="number" inputmode="decimal" step="0.1" bind:value={offsetInput} onchange={applyOffset} aria-invalid={!!offsetError} />
 			</label>
-			<p class="mt-2 text-[13px] leading-relaxed text-muted">The motion sensor and the EKG/EMG/pulse board keep separate clocks. A positive value means the motion sensor’s clock is ahead. It lines reps up with muscle activity and starts heart recovery at the right moment. Saved in this browser.</p>
+			<p class="mt-2 text-[13px] leading-relaxed text-muted">The motion sensor and the sensor board keep separate clocks. If reps and muscle activity don’t line up, enter how many seconds the motion sensor’s clock is ahead (negative if it’s behind). Heart recovery uses it too. Saved in this browser.</p>
 			{#if offsetError}<p class="mt-2 text-[14px] text-lime" role="alert">{offsetError}</p>{/if}
 		</details>
 	</div>

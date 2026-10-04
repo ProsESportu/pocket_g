@@ -24,7 +24,7 @@ export function databaseEcgWindow(readings: EcgReading[]): EcgWindow {
 	const timingValid = ordered.every((row, i) => Number.isFinite(captureMilliseconds(row.created_at)) &&
 		(i === 0 || continuousCapture(ordered[i - 1], row, ECG_SAMPLE_RATE))) && expectedCaptureRate(ordered, ECG_SAMPLE_RATE);
 	const reason = ordered.length === ECG_SAMPLES && !timingValid
-		? `ECG needs a continuous ${ECG_SAMPLE_RATE.toLocaleString('en-GB')} Hz recording. Capture timing or record gaps do not match; wait for 10 seconds of new data.` : '';
+		? 'The heart signal has gaps or uneven timing. Waiting for 10 seconds of clean data.' : '';
 	return {
 		// Never pad an incomplete window or pass invalid values to the model.
 		samples: available === ECG_SAMPLES && timingValid ? values as number[] : [],

@@ -31,7 +31,7 @@ export async function loadGyroSnapshot(fetcher: typeof fetch, baseUrl: string, a
 	if (!Number.isSafeInteger(afterId) || afterId < 0) throw new Error('Invalid gyro session boundary.');
 	const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
 	const throughId = await latestGyroId(fetcher, baseUrl, apiKey, requestSignal);
-	if (throughId < afterId) throw new Error('The gyro recording was cleared or replaced. Reset the energy session to start from the current recording.');
+	if (throughId < afterId) throw new Error('The motion recording was cleared or replaced. Press Start a fresh count under Movement energy to continue.');
 	const readings: ImuReading[] = [];
 	let cursor = afterId;
 	while (cursor < throughId) {

@@ -22,7 +22,7 @@ test('historical 125 Hz and incorrect average rates cannot enter either model', 
         const data = rows(20000, spacing);
         const ecg = databaseEcgWindow(data), emg = databaseEmgWindow(data);
         assert.equal(ecg.samples.length, 0);
-        assert.match(ecg.reason, /2,000 Hz/);
+        assert.match(ecg.reason, /uneven timing/);
         assert.ok(emg.reason);
     }
 });

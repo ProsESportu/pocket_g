@@ -57,7 +57,7 @@ export type GyroEnergy = {
 /** Positive changes in smoothed kinetic energy, rather than a sum or time integral of energy. */
 export function estimateGyroEnergy(readings: readonly GyroReading[], settings: GyroSettings): GyroEnergy {
 	const result: GyroEnergy = {
-		status: 'empty', reason: 'No gyro readings in this session yet.', workJ: 0, latestKineticJ: null,
+		status: 'empty', reason: 'No motion readings yet.', workJ: 0, latestKineticJ: null,
 		sampleCount: 0, skippedCount: 0, segmentCount: 0, durationSeconds: 0,
 		firstRecordId: null, lastRecordId: null, startedAt: '', endedAt: '', sets: []
 	};
@@ -126,5 +126,5 @@ export function estimateGyroEnergy(readings: readonly GyroReading[], settings: G
 		previous = { id: row.id, time, axes, kinetic };
 	}
 	if (!readings.length) return result;
-	return { ...result, status: result.sampleCount ? 'ready' : 'unavailable', reason: result.sampleCount ? '' : 'No usable gyro samples with valid timestamps in this session.' };
+	return { ...result, status: result.sampleCount ? 'ready' : 'unavailable', reason: result.sampleCount ? '' : 'No usable motion readings yet.' };
 }

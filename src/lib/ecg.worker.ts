@@ -54,7 +54,7 @@ async function loadModel(url: string, send: (message: WorkerUpdate) => void): Pr
 		received += value.length;
 		const progress = length > 0 ? Math.min(100, Math.floor(received / length * 100)) : undefined;
 		if (progress !== previousPercent) {
-			send({ type: 'status', text: 'Downloading ECGFounder (118 MiB)…', progress });
+			send({ type: 'status', text: 'Downloading the ECG model (123 MB)…', progress });
 			previousPercent = progress ?? -1;
 		}
 	}
@@ -95,7 +95,7 @@ self.onmessage = async (event: MessageEvent<InferenceRequest>) => {
 			}
 			session = initialized;
 		}
-		send({ type: 'status', text: 'Analyzing the database ECG waveform…' });
+		send({ type: 'status', text: 'Analyzing your heart signal…' });
 		const started = performance.now();
 		let output: ort.InferenceSession.ReturnType | undefined;
 		try {

@@ -13,7 +13,7 @@
 	// plots beat-to-beat heart rate. Minimum scales keep a quiet muscle or normal beat-to-beat variation from
 	// swinging across the whole lane.
 	const LANES: Lane[] = [
-		{ field: 'ekg', label: 'EKG', pen: 'var(--color-pen-ekg)', digits: 3 },
+		{ field: 'ekg', label: 'ECG', pen: 'var(--color-pen-ekg)', digits: 3 },
 		{ field: 'emg', label: 'EMG activity', pen: 'var(--color-pen-emg)', digits: 0, scale: { floor: 0, minSpan: 100 } },
 		{ field: 'puls', label: 'Pulse', pen: 'var(--color-pen-puls)', digits: 0, unit: 'BPM', scale: { minSpan: 30 } }
 	];
@@ -69,7 +69,7 @@
 		const shown = value(reading, lane);
 		return shown === null ? 'No value' : lane.unit ? `${shown} ${lane.unit}` : shown;
 	};
-	let valuetext = $derived(row ? `${time(row.created_at, 3)}, record ${row.id}. ${LANES.map((lane) => `${lane.label} ${withUnit(row, lane)}`).join(', ')}.` : 'No readings');
+	let valuetext = $derived(row ? `${time(row.created_at, 3)}. ${LANES.map((lane) => `${lane.label} ${withUnit(row, lane)}`).join(', ')}.` : 'No readings');
 
 	function inspect(event: PointerEvent) {
 		const axis = (event.currentTarget as HTMLElement).querySelector('[data-axis]');
@@ -171,7 +171,7 @@
 			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-rule px-4 py-3 text-[14px] md:px-6">
-			<p><span class="label text-lime">{inspecting ? 'Inspecting' : 'Latest'}</span> <span class="ml-1 tabular-nums">{row ? `${time(row.created_at, 3)}, record ${row.id}` : ''}</span></p>
+			<p><span class="label text-lime">{inspecting ? 'Inspecting' : 'Latest'}</span> <span class="ml-1 tabular-nums">{row ? time(row.created_at, 3) : ''}</span></p>
 			<p class="flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
 				{#each lanes as lane (lane.field)}
 					<span class="flex items-center gap-1.5 text-muted"><span aria-hidden="true" class="h-[3px] w-3" style:background={lane.pen}></span>{lane.label} <strong class="font-bold text-white">{withUnit(row, lane)}</strong></span>
@@ -183,7 +183,7 @@
 		<div class="chart-grid grid min-h-[280px] place-items-center px-6 py-12 text-center">
 			<div class="max-w-sm">
 				<p class="display text-[22px]">{unavailable ? 'No readings loaded' : 'No readings yet'}</p>
-				<p class="mt-3 text-[15px] leading-relaxed text-muted">{unavailable ? 'Your signals appear here once the connection is back.' : 'Start recording on your sensor. New readings appear here within 5 seconds.'}</p>
+				<p class="mt-3 text-[15px] leading-relaxed text-muted">{unavailable ? 'Your signals appear here once the connection is back.' : 'Start recording on your sensor. New readings appear here within a few seconds.'}</p>
 			</div>
 		</div>
 	{/if}

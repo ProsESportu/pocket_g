@@ -2,7 +2,7 @@
 	import type { CoachKind, CoachNote } from './coach';
 	import { COACH_ICONS, COACH_WORDS } from './coach-icons';
 
-	let { notes, readingCount, selected = $bindable(null) }: { notes: CoachNote[]; readingCount: number; selected?: string | null } = $props();
+	let { notes, selected = $bindable(null) }: { notes: CoachNote[]; selected?: string | null } = $props();
 	const uid = $props.id();
 	const KINDS: { kind: CoachKind; phrase: string }[] = [{ kind: 'fix', phrase: 'to fix' }, { kind: 'try', phrase: 'to try' }, { kind: 'keep', phrase: 'to keep' }];
 	const time = (value: string) => Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(value)) : 'Timestamp unavailable';
@@ -11,7 +11,7 @@
 		const [from, to] = [time(note.from), note.to ? time(note.to) : ''];
 		return to && to !== from ? `${from}–${to}` : from;
 	};
-	// Announced only when the mix of notes changes, not on every five-second refresh.
+	// Announced only when the mix of notes changes, not on every refresh.
 	let summary = $derived(notes.length ? `Coach’s notes: ${KINDS.map(({ kind, phrase }) => [notes.filter((note) => note.kind === kind).length, phrase] as const).filter(([count]) => count).map(([count, phrase]) => `${count} ${phrase}`).join(', ')}.` : '');
 	let linked = $derived(notes.some((note) => note.fromId !== undefined));
 </script>
@@ -30,7 +30,7 @@
 
 <section class="min-w-0" aria-labelledby={`${uid}-title`}>
 	<h2 id={`${uid}-title`} class="display text-[28px] md:text-[32px]"><span class="text-lime">Coach’s</span> <span class="outline-text">notes</span></h2>
-	<p class="mt-3 text-[15px] leading-relaxed text-muted">{readingCount ? `Sensor checks over the last ${readingCount} readings, the latest ECG and experimental EMG findings, and reps compared with your taught exercises. Times are in Warsaw.` : 'Sensor checks, the latest ECG and experimental EMG findings, and reps compared with your taught exercises. Times are in Warsaw.'}</p>
+	<p class="mt-3 text-[15px] leading-relaxed text-muted">Quick tips from your sensors, your last set and the ECG and EMG checks.</p>
 	<p class="sr-only" aria-live="polite">{summary}</p>
 	{#if notes.length}
 		<ul class="mt-5 -mx-3 space-y-2" role="list">
@@ -46,8 +46,8 @@
 				</li>
 			{/each}
 		</ul>
-		{#if linked}<p class="mt-3 text-[14px] text-muted">Select a note to mark its moment on the strip.</p>{/if}
+		{#if linked}<p class="mt-3 text-[14px] text-muted">Tap a note to mark its moment on the signal chart.</p>{/if}
 	{:else}
-		<p class="mt-5 text-[16px] leading-[1.55] text-white">Signal checks appear once a few readings have arrived.</p>
+		<p class="mt-5 text-[16px] leading-[1.55] text-white">Tips appear once a few readings have arrived.</p>
 	{/if}
 </section>

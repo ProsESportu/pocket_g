@@ -12,7 +12,7 @@ export type CoachNote = {
 export const MIN_DROPOUT = 3;
 export const MIN_READINGS = 10;
 const CHANNELS: SensorField[] = ['ekg', 'emg', 'puls'];
-const NAME: Record<SensorField, string> = { ekg: 'EKG', emg: 'EMG', puls: 'pulse' };
+const NAME: Record<SensorField, string> = { ekg: 'ECG', emg: 'EMG', puls: 'pulse' };
 const ORDER: Record<CoachKind, number> = { fix: 0, try: 1, keep: 2 };
 
 const missing = (value: number | null) => value === null || !Number.isFinite(value);
@@ -64,7 +64,8 @@ export function signalChecks(readings: Reading[], pulse: PulseResult): CoachNote
 		notes.push({ id: 'pulse-unclear', kind: 'try', channel: 'puls', ...span(pulseRows, rows), text: 'Pulse beats aren’t clear enough for a heart rate yet. Hold the pulse sensor still against the skin for a few seconds.' });
 	}
 	if (!notes.some((note) => note.kind === 'fix')) {
-		notes.push({ id: 'sensors-connected', kind: 'keep', text: `No sensor dropped out over the last ${rows.length} readings.` });
+		const seconds = Math.round((Date.parse(rows.at(-1)!.created_at) - Date.parse(rows[0].created_at)) / 1000);
+		notes.push({ id: 'sensors-connected', kind: 'keep', text: seconds >= 1 ? `No sensor dropped out in the last ${seconds} seconds.` : 'No sensor dropped out in the latest readings.' });
 	}
 	return notes.sort((a, b) => ORDER[a.kind] - ORDER[b.kind]);
 }

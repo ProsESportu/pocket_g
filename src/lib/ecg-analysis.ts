@@ -33,21 +33,21 @@ export class EcgAnalysisController {
 		this.worker?.terminate();
 		this.worker = undefined;
 		this.update({ busy: false, progress: undefined, status: 'Analysis failed.',
-			error: cause instanceof Error ? cause.message : 'Could not analyze the database ECG values.' });
+			error: cause instanceof Error ? cause.message : 'Could not analyze the heart signal.' });
 		this.dependencies.settled?.(false);
 	}
 
 	analyze(window: EcgWindow) {
 		if (this.state.busy) return;
 		const requestId = ++this.generation;
-		this.update({ busy: true, error: '', progress: undefined, status: 'Preparing database ECG values…' });
+		this.update({ busy: true, error: '', progress: undefined, status: 'Preparing your heart signal…' });
 		const { samples, error, ...info } = window;
 		const result: EcgResult = { status: 'unavailable', reason: '', scores: [], window: { ...info }, elapsedMs: 0, analyzedAt: '' };
 		const unavailable = (reason: string) => this.finish({ ...result, reason, analyzedAt: new Date().toISOString() });
 		if (error) { this.fail(new Error(error)); return; }
 		if (window.reason) { unavailable(window.reason); return; }
 		if (samples.length !== ECG_SAMPLES) {
-			unavailable(`Needs ${ECG_SAMPLES.toLocaleString('en-GB')} finite EKG samples (10 seconds). ${window.available.toLocaleString('en-GB')} so far.`);
+			unavailable(`Needs ${ECG_SAMPLES.toLocaleString('en-GB')} finite ECG samples (10 seconds). ${window.available.toLocaleString('en-GB')} so far.`);
 			return;
 		}
 		try { validateWaveform(samples); }
