@@ -1,8 +1,4 @@
-# MyGymBro — Supabase sample
-
-A small SvelteKit 3 + TypeScript viewer for `public.ekgemgpuls` in the
-`hackyeah2026` Supabase project
-
+# MyGymBro
 [live app](https://pocket-g.vercel.app)
 
 ## Sample app setup
