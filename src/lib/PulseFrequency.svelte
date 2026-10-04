@@ -21,24 +21,6 @@
 	$effect(() => {
 		if (result.status !== 'error' && !refreshError) previous = result.status === 'ready' ? result : null;
 	});
-
-	async function applyRate(event: SubmitEvent) {
-		event.preventDefault();
-		const rate = rateInput;
-		if (rate === undefined || !validPulseRate(rate)) {
-			inputError = 'Enter a sampling rate from 10 to 2,000 Hz.';
-			return;
-		}
-		applying = true;
-		inputError = '';
-		try {
-			const url = new URL(page.url.href);
-			url.searchParams.set('pulseSampleRate', String(rate));
-			await goto(url, { reset: false, refreshAll: true });
-		} catch {
-			inputError = 'Could not apply the sampling rate. Please try again.';
-		} finally { applying = false; }
-	}
 </script>
 
 <section class="min-w-0" aria-labelledby={`${uid}-title`} aria-busy={refreshing}>
@@ -62,16 +44,5 @@
 			<p class="mt-3 flex gap-2 text-[15px] leading-relaxed"><TriangleAlert class="mt-0.5 shrink-0 text-lime" size={18} />{display.stale ? 'Showing the last successful estimate. ' : ''}{ownFailure}</p>
 		{/if}
 	</div>
-	{#if showRatePicker}
-		<form class="mt-4" onsubmitcapture={applyRate}>
-			<p class="mb-3 flex gap-2 text-[15px] leading-relaxed"><TriangleAlert class="mt-0.5 shrink-0 text-lime" size={18} />{result.timingReason || display.result.timingReason} Use the sensor’s sampling rate instead.</p>
-			<label for={`${uid}-rate`} class="label block text-muted">Sampling rate (Hz)</label>
-			<div class="mt-2 flex gap-2">
-				<input id={`${uid}-rate`} class="min-h-11 w-full min-w-0 border border-white/45 bg-night px-3 text-[16px] text-white tabular-nums" name="pulseSampleRate" type="number" min="10" max="2000" step="any" required bind:value={rateInput} aria-describedby={`${uid}-help ${uid}-input-error`} aria-invalid={!!inputError} disabled={applying} />
-				<button class="btn btn-lime" type="submit" disabled={applying || refreshing}>{applying ? 'Applying…' : 'Apply'}</button>
-			</div>
-			<p id={`${uid}-input-error`} class="mt-2 text-[14px] text-lime" role="alert">{inputError}</p>
-		</form>
-	{/if}
-	<p id={`${uid}-help`} class="mt-3 max-w-[48ch] text-[13px] leading-relaxed text-muted">Uses up to 10 seconds of consecutive pulse samples. {showRatePicker ? 'Enter the sensor’s real sampling rate while capture timestamps are invalid.' : 'Timing comes from the capture timestamps.'}</p>
+	<p class="mt-3 max-w-[48ch] text-[13px] leading-relaxed text-muted">Uses up to 10 seconds of consecutive pulse samples. {rateFallback ? `Using the board’s ${PULSE.defaultSampleRate.toLocaleString('en-GB')} Hz while capture timestamps are invalid.` : 'Timing comes from the capture timestamps.'}</p>
 </section>
