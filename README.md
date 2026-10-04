@@ -3,7 +3,7 @@
 A small SvelteKit 3 + TypeScript viewer for `public.ekgemgpuls` in the
 `hackyeah2026` Supabase project
 
-[live app](pocket-g.vercel.app)
+[live app](https://pocket-g.vercel.app)
 
 ## Sample app setup
 
