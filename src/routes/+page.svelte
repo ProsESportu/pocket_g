@@ -168,7 +168,7 @@
 			<h2 id="signals-title" class="display mb-5 text-[28px] md:text-[32px]"><span class="text-lime">Your</span> <span class="outline-text">signals</span></h2>
 			<SessionStrip readings={displayed.readings} heartRate={displayed.heartRate} {notes} {selectedNote} unavailable={!!failure} />
 		</section>
-		<div class="min-w-0 lg:col-span-4 lg:row-span-6">
+		<div class="min-w-0 lg:col-span-4 lg:row-span-4">
 			<CoachNotes {notes} readingCount={displayed.readings.length} bind:selected={selectedNote} />
 			<div class="mt-14 space-y-5">
 				<RecordingQuality summary={displayed.quality} loadedAt={displayed.loadedAt} stale={!!failure} monitoring={autoRefresh} {refreshing} />
@@ -190,10 +190,9 @@
 				<PulseFrequency result={data.pulse} refreshError={failure} {refreshing} frequency />
 			</div>
 		</section> -->
-		<div class="min-w-0 lg:col-span-8">
+		<!-- The ECG and EMG checks sit side by side across the full width, below the right column. -->
+		<div class="grid min-w-0 gap-x-8 gap-y-14 lg:col-span-12 lg:grid-cols-2">
 			<EcgAnalysis window={displayed.ecg} connectionError={failure} onresult={(result) => { ecgResult = result; }} onstate={(state) => { ecgState = state; }} />
-		</div>
-		<div class="min-w-0 lg:col-span-8">
 			<EmgAnalysis throughId={displayed.readings[0]?.id} connectionError={failure} onresult={(result) => { emgResult = result; }} onstate={(state) => { emgState = state; }} />
 		</div>
 	</div>

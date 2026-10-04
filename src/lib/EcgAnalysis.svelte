@@ -54,7 +54,7 @@
 <section class="relative min-w-0 overflow-hidden border border-rule bg-night p-5 pb-12 md:p-8 md:pb-14" aria-labelledby="ecg-title" aria-busy={busy}>
 	<span aria-hidden="true" class="wedge bottom-0 left-0 h-3 w-44"></span>
 	<div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-		<h2 id="ecg-title" class="display text-[28px] md:text-[32px]"><span class="text-lime">ECG model</span> <span class="outline-text">check</span></h2>
+		<h2 id="ecg-title" class="display text-[28px] md:text-[32px]"><span class="text-lime">ECG</span> <span class="outline-text">check</span></h2>
 		<p class="label text-muted tabular-nums">{window.available.toLocaleString('en-GB')} of {samples} samples</p>
 	</div>
 	<p class="mt-3 max-w-[62ch] text-[16px] leading-relaxed text-muted">Runs the single-lead ECGFounder model on your latest 10 seconds of EKG when you press Analyze ECG. It runs in this browser, so the samples aren’t uploaded anywhere.</p>

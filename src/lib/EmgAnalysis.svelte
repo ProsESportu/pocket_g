@@ -44,7 +44,7 @@
 	}
 </script>
 
-<!-- Same panel as the ECG model check: bordered box with the lime wedge along the bottom edge. -->
+<!-- Same panel as the ECG check: bordered box with the lime wedge along the bottom edge. -->
 <section class="relative min-w-0 overflow-hidden border border-rule bg-night p-5 pb-12 md:p-8 md:pb-14" aria-labelledby="emg-analysis-title" aria-busy={analysis.busy}>
 	<span aria-hidden="true" class="wedge bottom-0 left-0 h-3 w-44"></span>
 	<div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
