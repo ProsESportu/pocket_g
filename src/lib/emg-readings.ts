@@ -1,12 +1,14 @@
 import { EMG, type EmgReading, type EmgWindow } from './emg.ts';
+import { captureMilliseconds } from './capture-time.ts';
+import { continuousCapture, expectedCaptureRate } from './signal-timing.ts';
 
 /** Keep only the continuous segment ending at the snapshot's newest row. */
 export function databaseEmgWindow(readings: EmgReading[]): EmgWindow {
 	const segment: EmgReading[] = [];
 	for (const row of [...readings].sort((a, b) => b.id - a.id).slice(0, EMG.maxSamples)) {
-		if (!row || !Number.isSafeInteger(row.id) || typeof row.emg !== 'number' || !Number.isFinite(row.emg)) break;
+		if (!row || !Number.isSafeInteger(row.id) || typeof row.emg !== 'number' || !Number.isFinite(row.emg) || !Number.isFinite(captureMilliseconds(row.created_at))) break;
 		const newer = segment.at(-1);
-		if (newer && (newer.id !== row.id + 1 || Date.parse(newer.created_at) - Date.parse(row.created_at) > 1000)) break;
+		if (newer && !continuousCapture(row, newer, EMG.sampleRate)) break;
 		segment.push(row);
 	}
 	segment.reverse();
@@ -14,7 +16,8 @@ export function databaseEmgWindow(readings: EmgReading[]): EmgWindow {
 		samples: segment.map((row) => row.emg!), sampleCount: segment.length, duration: segment.length / EMG.sampleRate,
 		firstRecordId: segment[0]?.id ?? null, lastRecordId: segment.at(-1)?.id ?? null,
 		startedAt: segment[0]?.created_at ?? '', endedAt: segment.at(-1)?.created_at ?? '',
-		reason: segment.length < EMG.minSamples ? `Need at least 10 continuous seconds of EMG (${EMG.minSamples.toLocaleString('en-GB')} samples). Found ${segment.length.toLocaleString('en-GB')}.` : ''
+		reason: segment.length < EMG.minSamples ? `Need at least 10 continuous seconds of EMG at ${EMG.sampleRate.toLocaleString('en-GB')} Hz (${EMG.minSamples.toLocaleString('en-GB')} samples). Found ${segment.length.toLocaleString('en-GB')}.`
+			: !expectedCaptureRate(segment, EMG.sampleRate) ? `EMG capture timing does not match ${EMG.sampleRate.toLocaleString('en-GB')} Hz. Wait for a continuous recording at the configured rate.` : ''
 	};
 }
 
@@ -24,7 +27,7 @@ export async function loadDatabaseEmg(
 	if (throughId === undefined) return databaseEmgWindow([]);
 	if (!Number.isSafeInteger(throughId)) throw new Error('Invalid EMG snapshot record ID. Refresh to retry.');
 	const rows: EmgReading[] = [];
-	const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000);
+	const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(120000)]) : AbortSignal.timeout(120000);
 	let beforeId: number | undefined;
 	while (rows.length < EMG.maxSamples) {
 		requestSignal.throwIfAborted();

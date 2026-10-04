@@ -19,9 +19,9 @@ export function validateProfile(value: unknown): EmgProfile {
 	const profile = value as EmgProfile;
 	const p = profile?.preprocessing;
 	if (!profile || profile.id !== EMG.profile || profile.experimental !== true || profile.sample_rate !== EMG.sampleRate ||
-		!p || p.lowcut_hz !== 20 || p.highcut_hz !== 55 || p.notch_hz !== 50 || p.notch_quality !== 30 ||
+		!p || p.lowcut_hz !== 20 || p.highcut_hz !== 450 || p.notch_hz !== 50 || p.notch_quality !== 30 ||
 		p.envelope_hz !== 5 || p.distance_seconds !== 2 || p.prominence !== 0.2 || p.baseline_reps !== 3 || p.rep_duration_unit !== 'samples') {
-		throw new Error('Unsupported experimental EMG preprocessing profile.');
+		throw new Error('Unsupported 2,000 Hz EMG preprocessing profile.');
 	}
 	for (const name of ['bandpass', 'notch', 'envelope'] as const) {
 		const filter = profile.filters?.[name];

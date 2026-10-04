@@ -12,9 +12,10 @@ explicit environment configuration.
 
 Run `npm install`, then `npm run dev`.
 
-The app loads the last 10 seconds of rows (about 1,250 at 125 Hz) directly
-through the Supabase REST API. It displays latest sensor values and a
-refresh button. Separate EKG, EMG, and pulse
+The app loads the last 10 seconds of rows (about 20,000 at 2,000 Hz) directly
+through the Supabase REST API. It displays latest sensor values,
+a loaded row count, a searchable table with 20 rows per page, and a
+refresh button. Search applies to the loaded rows. Separate EKG, EMG, and pulse
 charts plot all loaded rows by timestamp, with independent scales and gaps for
 missing values. Raw EMG swings across the sensor's range from one sample to the
 next, so its chart shows an activity envelope instead: the deviation from a
@@ -27,8 +28,8 @@ Connection errors and empty results have dedicated states.
 
 The universal page loader fetches 12.5 seconds of readings in pages of up to
 1,000 rows (the last page sized from the sample spacing so far), then the ECG
-window, during initial server rendering and subsequent browser refreshes using
-the public environment configuration. The same readings feed the charts
+window if the shared readings do not contain it, during initial server rendering and subsequent browser refreshes using
+the public environment configuration. The same readings feed the charts, table,
 and pulse estimate; pulse samples are fetched separately only in sampling-rate
 fallback mode. JavaScript is required for monitoring and model analysis.
 The existing adapter-auto deployment setup is retained; static hosting needs a
@@ -217,8 +218,8 @@ on the overall `ABNORMAL ECG` score. ECG findings are sorted by descending score
 then original model index; all 150 scores remain available in the panel and JSON.
 Fragments and comparison statements are shown literally as model outputs requiring
 clinical context; the app does not compare recordings or reconstruct diagnoses.
-These flags are unvalidated: the 125 Hz recording is upsampled to ECGFounder's
-500 Hz input, which keeps real timing but adds no detail above 62.5 Hz.
+These flags are unvalidated for this sensor. Raw 2,000 Hz ECG is anti-aliased
+and downsampled to ECGFounder's 500 Hz input; electrode placement is assumed to be lead I.
 
 Sensor fixes precede model findings, followed by sensor suggestions and positive
 checks. Each model replaces its notes after successful completion. No qualifying
@@ -230,17 +231,12 @@ only the overlap with the currently visible strip.
 ## Pulse frequency
 
 Pulse frequency automatically uses `created_at` capture timestamps to estimate
-BPM and Hz on the existing five-second/manual refresh. When timestamps are
-missing, invalid, repeated, or run backwards within the current continuous
-recording, the board's known rate, **1,800 Hz**, times the pulse instead; valid
-timestamps always take priority.
-
-Since 2026-10-04 the EKG/EMG/pulse board samples at about 1,800 Hz (1,845–1,890
-rows per second measured), and its timestamps run backwards because upload batches
-overlap. Each 500-sample batch is stamped 0.5 ms apart, and rows from two batches
-can interleave. Until the uploader stamps samples in order, pulse timing therefore
-uses the sampling rate. The ECG model, EMG fatigue analysis and 12,501-row strip
-loader still assume 125 Hz. The dedicated Pulse frequency panel beside the session heading
+BPM and Hz on the existing five-second/manual refresh. The sampling-rate picker
+appears only when timestamps are missing, invalid, repeated, or run backwards
+within the current continuous recording. In that case, enter the sensor’s actual
+acquisition rate (10–2,000 Hz) and click **Apply**. The fallback rate is saved in
+the `pulseSampleRate` URL parameter; valid timestamps always take priority over
+that saved rate. The dedicated Pulse frequency panel beside the session heading
 shows Hz prominently alongside BPM, beat count, duration, timing source, and
 record IDs. It follows live/manual refreshes and preserves the last successful
 estimate with a stale label after failures. Raw pulse values remain in the
@@ -248,9 +244,7 @@ table.
 
 The estimate uses the latest ten seconds of the page's readings. In
 sampling-rate fallback mode, the browser reads them through separate paginated,
-snapshot-bounded read-only requests, up to `ceil(10 × rate) + 1` rows (18,001 at
-1,800 Hz). The strip's own loader keeps its 1,000-rows-per-second cap, so a faster
-board shows a shorter strip rather than a heavier refresh. Calculation uses the newest continuous
+snapshot-bounded read-only requests, capped at 20,001 rows. Calculation uses the newest continuous
 segment in record-ID order, ending at missing/nonfinite values or ID gaps.
 Timestamp mode preserves microseconds and handles irregular sample spacing;
 capture pauses longer than both one second and five median sample intervals
@@ -303,41 +297,30 @@ and results stay in the browser. The 118 MiB model downloads
 on the first **Analyze ECG**, and the session is reused until failure or navigation.
 Failures create a fresh worker for retry.
 
-The browser loads the 1,250 latest EKG rows (`id,created_at,ekg`; 10 seconds at
-125 Hz) separately from
-the dashboard's 10-second chart/table query. It pages through the existing Data API
-in batches of up to 1,000, using descending IDs and the latest dashboard ID as
-a fixed upper boundary. Missing values stay in this newest window, so ECG never
-falls back to an older recording to fill it. Samples are then passed oldest to
-newest by record ID for waveform analysis, as with pulse and EMG.
-This handles the API's row limit and keeps new inserts from shifting pages.
-Each dashboard refresh updates this window. Results keep their original record
-IDs when new data arrives.
+ECG uses the latest 20,000 EKG rows (ten seconds at 2,000 Hz), reusing the
+12.5-second dashboard fetch whenever possible. Otherwise it pages through the
+Data API in batches of up to 1,000 with the dashboard's latest ID as a fixed
+upper boundary. Missing values stay in the newest window. Samples are ordered
+oldest to newest by record ID; newer inserts do not shift an analysis snapshot.
 
-If there are fewer than 1,250 usable database ECG samples, the panel
-shows the available count and does not start inference or download the model.
-Rows with null EKG values stay in the newest database window. Missing or nonfinite
-values block analysis. This is a sample-count window, with no verified continuity
-or sampling rate in the current schema.
-There is no file picker, synthetic demo, or padding; missing samples are never
-filled in.
-Database read errors are displayed separately from insufficient samples.
-ECG acquisition and preprocessing are configured for lead I at 125 Hz (1,250
-samples represent 10 seconds); the current database has no lead/sampling-rate
-metadata to verify this. The Pi can't record at the model's 500 Hz, so after
-filtering at 125 Hz the window is upsampled 4x in the browser to the 5,000
-samples (10 seconds at 500 Hz) the model expects. Earlier versions passed 5,000
-samples (40 seconds) unresampled, which made the model see time 4x faster.
+Analysis requires 20,000 finite float32-compatible values, consecutive IDs,
+valid strictly increasing microsecond timestamps, no interval above 2.5 ms,
+and an average rate within 20% of 2,000 Hz. Historical 125 Hz data, rate
+transitions, missing samples and detectable interruptions block inference.
+These timing checks are engineering tolerances and cannot detect every
+pre-insert loss without a capture sequence number. Database errors are reported
+separately. There is no padding or fallback to earlier recordings.
 
-Raw mode adapts the upstream `util.filter_bandpass` at source revision
-`04edac702b61c91face519774ddcc0cd712fef23`: 50 Hz notch (Q=30), fourth-order
-0.67–40 Hz Butterworth bandpass, forward/backward filtering with SciPy's default
-odd padding, filters designed for 125 Hz, 51-sample zero-padded median baseline
-removal (approximately 0.4 seconds, preserving the upstream window duration), then population
-z-score with epsilon `1e-8`. The 1,250 prepared samples are then upsampled 4x with
-Lanczos (a = 4) windowed-sinc interpolation, keeping every original sample and
-repeating the end samples at the edges, and z-scored again. Calculations use
-float64 and produce a float32 tensor named `ecg` of shape `[1,1,5000]`.
+The sensor now supplies raw ECG without the previous digital capture filter.
+Acquisition is configured for 2,000 Hz; lead I remains an electrode-placement
+assumption. An 81-tap Kaiser FIR (beta 5), matching SciPy `resample_poly(1, 4)`
+with zero extension and delay compensation, anti-aliases and decimates the
+20,000 samples to 5,000 at 500 Hz. Model-rate processing follows the upstream
+`util.filter_bandpass` at revision `04edac702b61c91face519774ddcc0cd712fef23`:
+50 Hz notch (Q=30), fourth-order 0.67–40 Hz Butterworth bandpass, float64
+forward/backward filtering with SciPy default odd padding, 201-sample
+zero-padded median baseline removal, then population z-score with epsilon
+`1e-8`. The float32 tensor `ecg` has shape `[1,1,5000]`.
 Output `logits` has shape `[1,150]`; stable independent sigmoids are paired with
 `tasks.txt` in its original order. The UI ranks scores for browsing, while JSON
 exports retain the model label order, include logits and database record IDs,
@@ -368,45 +351,40 @@ The EMG panel analyzes raw EMG, when **Analyze EMG** is pressed, from
 `public.ekgemgpuls.emg`. This integration uses the supplied standardized logistic
 regression classifier from `EMG_fatigue_detection`, upstream revision
 `1825550c132de4fca2178a34ea9ce5db375a1de6`. The acquisition rate is configured as
-**125 Hz**, as confirmed for this sensor. Each consecutive database row is
-assumed to contain one uniformly spaced raw EMG sample.
+**2,000 Hz**, as reported for the updated backend, with raw ADC-count samples.
 
 Analysis is an **experimental, retrospective snapshot** of the latest continuous
-recording, up to 7,500 samples (60 seconds). EMG is fetched for each eligible fresh snapshot,
-using the dashboard's latest record ID as a fixed upper boundary. Read-only
-requests page in descending-ID order, at most 1,000 rows per page, with a shared
-30-second timeout. Null samples remain in the query. The newest segment ends at
-missing/nonfinite EMG values, missing record IDs, or a forward timestamp gap
-exceeding one second. Older segments are never stitched into the input.
-Timestamps describe the recording and detectable pauses; they do not determine
-the configured sample rate. Missing, repeated, or unreliable timestamps cannot
-reveal otherwise unmarked capture pauses.
+recording, up to 120,000 samples (60 seconds). Read-only requests page in
+descending-ID order under the latest dashboard ID, at most 1,000 rows per page,
+with a shared 120-second timeout. Null samples remain visible. Missing/nonfinite
+values, invalid/non-increasing timestamps, ID gaps, or capture intervals above
+2.5 ms end the newest segment. The segment's average rate must be within 20%
+of 2,000 Hz. Older segments and historical 125 Hz recordings are not stitched
+into the input. Timing tolerances do not verify actual ADC conversion timing
+or detect every pre-insert loss.
 
-At least 1,250 continuous samples (10 seconds) and three detected repetitions
-are required. Short, flat, or insufficient-repetition recordings report an
-unavailable reason without fatigue scores. The model downloads only after those
-checks pass. Preprocessing and inference run in a dedicated browser worker with
-the app's existing ONNX Runtime Web 1.30.0 CPU WASM runtime and one thread.
-The session is reused; navigation stops database loading and terminates the worker.
-Retrying after an error starts a fresh worker. Results stay in browser memory.
+At least 20,000 continuous samples (10 seconds) and three detected repetitions
+are required. Short, flat or insufficient-repetition recordings report an
+unavailable reason without fatigue scores. Preprocessing and inference run in
+a browser worker using ONNX Runtime Web 1.30.0 CPU WASM with one thread. Model
+sessions are reused; cancellation/navigation stop loading and inference, and
+retrying after an error creates a fresh worker. Results stay in browser memory.
 
-The original model expects features from 20–450 Hz filtered EMG, which cannot be
-reproduced at 125 Hz (Nyquist frequency 62.5 Hz). A separate
-`experimental-125hz.json` profile uses a fourth-order 20–55 Hz Butterworth
-bandpass, 50 Hz notch with Q=30, rectification, and fourth-order 5 Hz envelope.
-Filtering uses float64 SciPy-compatible forward/backward filtering with odd
-padding. Repetitions use two-second peak spacing and relative prominence 0.2,
-midpoint boundaries, RMS, Welch median frequency, the first-three-repetition
-baseline, first differences, and rolling means. All 24 features retain their
-original order; sample indices and repetition duration remain actual sample
-counts at 125 Hz. There is no resampling, retraining, amplitude calibration, or
-replacement of classifier weights.
+`upstream-2000hz.json` copies the supplied metadata's original 2,000 Hz
+coefficients: fourth-order 20–450 Hz Butterworth bandpass, 50 Hz notch (Q=30),
+rectification and fourth-order 5 Hz envelope. Float64 forward/backward filtering
+uses SciPy-compatible odd padding. Repetitions use two-second peak spacing,
+relative prominence 0.2, midpoint boundaries, RMS, Welch median frequency,
+the first-three-repetition baseline, first differences and rolling means.
+All 24 features retain their original order, with sample indices and repetition
+duration in actual 2,000 Hz sample counts. Classifier weights are unchanged.
+The historical `experimental-125hz.json` asset is retained but is no longer loaded.
 
 The original threshold is **0.58**, with fatigue triggered by **2 of the last 3**
 scores at or above the threshold, including partial initial windows. Smoothing
-is disabled. These scores and the trigger are **unvalidated at 125 Hz**:
-reduced bandwidth, acquisition conditions, amplitude units, and sample-index
-features differ from training. Engineering parity tests do not establish
+is disabled. These scores and the trigger are **unvalidated for this sensor at 2,000 Hz**:
+acquisition conditions, amplitude units, electrode placement and exercise
+labels have not been matched to training. Engineering parity tests do not establish
 fatigue-detection accuracy for this sensor. Moving the window resets repetition
 numbering and baseline; a window can contain part of an exercise set.
 
@@ -423,12 +401,12 @@ are preserved under `static/models/emg-fatigue/`. The 692-byte model SHA-256 is
 `4e15901646a835d4c7e54acb71c0e96e3df5ab946403ead8b5687e6ada3f5e5e`;
 the worker verifies it against metadata before creating the inference session.
 The supplied upstream reports describe the original pipeline, not the new
-125 Hz profile. Deployments must serve the model, JSON profile, and worker
+sensor integration. Deployments must serve the model, JSON profile, and worker
 WASM/MJS assets as files rather than HTML fallbacks.
 
 `npm test` includes EMG pagination and continuity, cancellation and retry,
 snapshot provenance, coach notes and export, independent SciPy parity for the
-125 Hz pipeline (including filter edges and all features), and real WASM model
+2,000 Hz pipeline (including filter edges and all features), and real WASM model
 parity against all 420 upstream reference rows. Probability error must be at
 most `2e-6`, with matching threshold and per-session trigger decisions.
 Regenerate the profile and DSP fixtures with `python tests/generate-emg-reference.py`

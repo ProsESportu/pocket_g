@@ -5,7 +5,7 @@ export async function loadDatabaseEcg(fetcher: typeof fetch, baseUrl: string, ap
 	if (throughId === undefined) return databaseEcgWindow([]);
 	const rows: EcgReading[] = [];
 	let beforeId: number | undefined;
-	const signal = AbortSignal.timeout(10000);
+	const signal = AbortSignal.timeout(30000);
 	try {
 		while (rows.length < ECG_SAMPLES) {
 			const url = new URL('/rest/v1/ekgemgpuls', baseUrl);

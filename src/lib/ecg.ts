@@ -1,10 +1,10 @@
-// The Pi records at 125 Hz; ECGFounder takes 10 seconds at 500 Hz. The newest 10 seconds of database
-// samples are upsampled 4x in the browser to the model's input size.
-export const ECG_SAMPLE_RATE = 125;
+// Raw BioAmp/MCP3008 acquisition is 2,000 Hz. ECGFounder takes ten seconds at 500 Hz.
+// Anti-aliased downsampling converts 20,000 capture samples into 5,000 model samples.
+export const ECG_SAMPLE_RATE = 2000;
 export const ECG_MODEL_RATE = 500;
 export const ECG_MODEL_SAMPLES = 5000;
 export const ECG_SAMPLES = ECG_MODEL_SAMPLES * ECG_SAMPLE_RATE / ECG_MODEL_RATE;
-export const ECG_BASELINE_SAMPLES = 51;
+export const ECG_BASELINE_SAMPLES = 201;
 export const ECG_LABELS = 150;
 // Only these labels leave the worker; abnormal findings are never shown.
 export const NORMAL_ECG_LABELS = new Set(['NORMAL SINUS RHYTHM', 'NORMAL ECG', 'SINUS RHYTHM', 'otherwise normal ecg']);
@@ -28,10 +28,10 @@ export function serializeEcgResult(result: EcgResult): string {
 		firstRecordId: result.window.firstRecordId, lastRecordId: result.window.lastRecordId,
 		startedAt: result.window.startedAt, endedAt: result.window.endedAt,
 		assumedSampleRate: ECG_SAMPLE_RATE, assumedLead: 'I', samples: ECG_SAMPLES,
-		preprocessing: 'raw', resampling: `Lanczos (a = 4) from ${ECG_SAMPLE_RATE} Hz to ${ECG_MODEL_RATE} Hz`, modelSamples: ECG_MODEL_SAMPLES,
+		preprocessing: 'raw', resampling: `81-tap Kaiser FIR (beta = 5), zero-phase downsampling from ${ECG_SAMPLE_RATE} Hz to ${ECG_MODEL_RATE} Hz`, modelSamples: ECG_MODEL_SAMPLES,
 		inferenceMs: result.elapsedMs, analyzedAt: result.analyzedAt,
 		status: result.status, reason: result.reason, scores: result.scores,
-		validation: `Unvalidated model outputs requiring clinical context; ${ECG_SAMPLE_RATE} Hz recordings are upsampled to the model’s ${ECG_MODEL_RATE} Hz input, which adds no detail above ${ECG_SAMPLE_RATE / 2} Hz.`
+		validation: `Unvalidated model outputs requiring clinical context; raw ${ECG_SAMPLE_RATE} Hz recordings are anti-aliased and downsampled to ${ECG_MODEL_RATE} Hz. Sensor-specific accuracy and electrode placement are unverified.`
 	}, null, 2);
 }
 

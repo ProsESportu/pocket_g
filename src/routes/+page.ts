@@ -1,6 +1,7 @@
 import * as env from '$app/env/public';
 import type { PageLoad } from './$types';
 import { loadRecentReadings, type Reading } from '#lib/readings.ts';
+import { ECG_SAMPLES } from '#lib/ecg.ts';
 import { databaseEcgWindow } from '#lib/ecg-database.ts';
 import { loadDatabaseEcg } from '#lib/ecg-readings.ts';
 import { estimatePulseWithTiming, PULSE, pulseConfiguration, timestampPulseWindow } from '#lib/pulse.ts';
@@ -29,8 +30,9 @@ export const load: PageLoad = async ({ fetch, depends }) => {
 		const readings = Number.isFinite(newest) ? rows.filter((row) => newest - Date.parse(row.created_at) <= STRIP_SECONDS * 1000) : rows;
 		// Valid timestamps let the loaded rows time the pulse; otherwise the sampling-rate fallback loads its own window.
 		const timed = !timestampPulseWindow(rows).invalid;
+		const ecgWindow = databaseEcgWindow(rows);
 		const [ecg, pulse] = await Promise.all([
-			loadDatabaseEcg(fetch, env.PUBLIC_SUPABASE_URL, env.PUBLIC_SUPABASE_PUBLISHABLE_KEY, rows[0]?.id),
+			ecgWindow.rowCount === ECG_SAMPLES ? ecgWindow : loadDatabaseEcg(fetch, env.PUBLIC_SUPABASE_URL, env.PUBLIC_SUPABASE_PUBLISHABLE_KEY, rows[0]?.id),
 			timed ? estimatePulseWithTiming(rows, pulseConfig) : loadDatabasePulse(fetch, env.PUBLIC_SUPABASE_URL, env.PUBLIC_SUPABASE_PUBLISHABLE_KEY, rows[0]?.id, pulseConfig)
 		]);
 		const heartRate = timed ? estimatePulseWithTiming(rows, pulseConfig, STRIP_SECONDS + RATE_LEAD_SECONDS) : pulse;

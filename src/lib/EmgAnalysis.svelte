@@ -24,7 +24,7 @@
 		urls: () => ({
 			modelUrl: new URL(asset('models/emg-fatigue/fatigue.onnx'), location.href).href,
 			metadataUrl: new URL(asset('models/emg-fatigue/metadata.json'), location.href).href,
-			profileUrl: new URL(asset('models/emg-fatigue/experimental-125hz.json'), location.href).href
+			profileUrl: new URL(asset('models/emg-fatigue/upstream-2000hz.json'), location.href).href
 		}),
 		change: (next) => { analysis = next; onstate(next); },
 		complete: (next) => onresult(next)
@@ -49,9 +49,9 @@
 	<span aria-hidden="true" class="wedge bottom-0 left-0 h-3 w-44"></span>
 	<div class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
 		<h2 id="emg-analysis-title" class="display text-[28px] md:text-[32px]"><span class="text-lime">EMG</span> <span class="outline-text">fatigue</span></h2>
-		<span class="label border border-lime px-2 py-1 text-lime">Experimental · 125 Hz</span>
+		<span class="label border border-lime px-2 py-1 text-lime">Experimental · 2,000 Hz</span>
 	</div>
-	<p class="mt-3 max-w-[62ch] text-[16px] leading-relaxed text-muted">Analyze up to 60 continuous seconds of raw EMG when you press Analyze EMG. Fatigue scores are unvalidated at this sampling rate.</p>
+	<p class="mt-3 max-w-[62ch] text-[16px] leading-relaxed text-muted">Analyze up to 60 continuous seconds of raw EMG when you press Analyze EMG. Uses the original 20–450 Hz filter profile at 2,000 Hz. Fatigue scores remain unvalidated for this sensor and exercise.</p>
 	<p class="mt-2 text-[14px] leading-relaxed text-muted">This is a retrospective snapshot. Each moving window resets repetition numbering and the first-three-repetition baseline. At least 10 seconds and three detected repetitions are required.</p>
 	<div class="mt-5 flex flex-wrap gap-3">
 		{#if analysis.busy}
@@ -84,7 +84,7 @@
 				<RepConsistency rows={result.rows} />
 				<div class="mt-4 overflow-x-auto">
 					<table class="w-full text-left text-[14px] tabular-nums">
-						<caption class="sr-only">Experimental fatigue scores by repetition, unvalidated at 125 Hz</caption>
+						<caption class="sr-only">Experimental fatigue scores by repetition, unvalidated for this sensor</caption>
 						<thead class="label text-lime"><tr class="border-b border-rule"><th scope="col" class="py-2 pr-4">Rep</th><th scope="col" class="py-2 pr-4">Peak (s)</th><th scope="col" class="py-2 pr-4">Score</th><th scope="col" class="py-2">≥ 58%</th></tr></thead>
 						<tbody>{#each result.rows as row (row.rep)}<tr class="border-b border-rule"><th scope="row" class="py-2 pr-4 font-semibold">{row.rep}</th><td class="py-2 pr-4">{row.peak_time.toFixed(2)}</td><td class="py-2 pr-4">{(row.proba * 100).toFixed(1)}%</td><td class="py-2">{row.pred ? 'Yes' : 'No'}</td></tr>{/each}</tbody>
 					</table>

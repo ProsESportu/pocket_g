@@ -44,9 +44,9 @@ test('continues across API caps below 1,000 rows and stops when rows run out', a
 });
 
 test('stops at the row cap or at timestamps it cannot measure', async () => {
-	// 0.1 ms spacing would need 125,001 rows; the cap is 1,000 Hz for the window.
-	const dense = databaseMock(rows(20000, 0.1));
-	assert.equal((await load(dense.fetcher)).length, 12501);
+	// 0.1 ms spacing would need 125,001 rows; the cap is 2,000 Hz for the window.
+	const dense = databaseMock(rows(30000, 0.1));
+	assert.equal((await load(dense.fetcher)).length, 25001);
 	const invalid = databaseMock(rows(5000).map((row) => ({ ...row, created_at: 'not a time' })));
 	assert.equal((await load(invalid.fetcher)).length, 1000);
 	assert.equal(invalid.calls.length, 1);

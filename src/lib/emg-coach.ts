@@ -11,6 +11,6 @@ export function emgCoachNote(result: EmgResult | null, readings: Reading[], stal
 	return [{
 		id: 'emg-fatigue', kind: 'try', channel: 'emg', from: window.startedAt, to: window.endedAt,
 		...(overlap.length ? { fromId: overlap[0].id, toId: overlap.at(-1)!.id } : {}),
-		text: `${stale ? 'Stale snapshot. ' : ''}Experimental EMG fatigue trigger at repetition ${result.triggerRep} in analyzed records ${window.firstRecordId}–${window.lastRecordId}. Scores are unvalidated at 125 Hz.${newer ? ' Newer readings have arrived; monitoring updates this snapshot when active.' : ''}`
+		text: `${stale ? 'Stale snapshot. ' : ''}Experimental EMG fatigue trigger at repetition ${result.triggerRep} in analyzed records ${window.firstRecordId}–${window.lastRecordId}. Scores are unvalidated for this sensor at 2,000 Hz.${newer ? ' Newer readings have arrived; monitoring updates this snapshot when active.' : ''}`
 	}];
 }

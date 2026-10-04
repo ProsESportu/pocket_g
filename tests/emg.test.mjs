@@ -10,13 +10,14 @@ import { predictRows, applyTrigger, featureMatrix, validateMetadata, validatePro
 
 const json = async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
 const metadata = validateMetadata(await json('../static/models/emg-fatigue/metadata.json'));
-const profile = validateProfile(await json('../static/models/emg-fatigue/experimental-125hz.json'));
+const profile = validateProfile(await json('../static/models/emg-fatigue/upstream-2000hz.json'));
 const fixture = await json('./fixtures/emg-preprocessing.json');
 const modelFixture = await json('./fixtures/emg-model-parity.json');
 
-for (const ref of fixture.signals) test(`125 Hz SciPy parity: ${ref.name}, including filter edges and all 24 features`, () => {
+for (const ref of fixture.signals) test(`2,000 Hz SciPy parity: ${ref.name}, including filter edges and all 24 features`, () => {
     const result = processSignal(Float64Array.from(ref.samples), profile);
-    const close = (actual, expected, name) => assert.ok(Math.abs(actual - expected) <= 1e-10 + 1e-9 * Math.abs(expected), `${name}: ${actual} vs ${expected}`);
+    // Direct-form 5 Hz filtering at 2 kHz accumulates small float64 platform differences.
+    const close = (actual, expected, name) => assert.ok(Math.abs(actual - expected) <= 2e-8 + 1e-8 * Math.abs(expected), `${name}: ${actual} vs ${expected}`);
     assert.deepEqual(result.peaks, ref.peaks);
     assert.equal(result.rows.length, ref.rows.length);
     result.filtered.forEach((value, i) => close(value, ref.filtered[i], `filtered sample ${i}`));
@@ -26,17 +27,18 @@ for (const ref of fixture.signals) test(`125 Hz SciPy parity: ${ref.name}, inclu
         for (const [column, value] of Object.entries(ref.rows[i])) close(row[column], value, `rep ${i + 1} ${column}`);
     });
 });
-for (const ref of fixture.mdf) test(`125 Hz Welch parity with ${ref.samples.length} samples`, () => {
-    assert.ok(Math.abs(medianFrequency(Float64Array.from(ref.samples), 125) - ref.expected) < 1e-12);
+for (const ref of fixture.mdf) test(`2,000 Hz Welch parity with ${ref.samples.length} samples`, () => {
+    assert.ok(Math.abs(medianFrequency(Float64Array.from(ref.samples), 2000) - ref.expected) < 1e-12);
 });
 
 test('EMG model hash and exact feature order are preserved', async () => {
     const model = await readFile(new URL('../static/models/emg-fatigue/fatigue.onnx', import.meta.url));
     assert.equal(createHash('sha256').update(model).digest('hex'), metadata.model_sha256);
     assert.equal(model.byteLength, 692);
+    assert.deepEqual(profile.filters, metadata.filters['2000']);
     assert.deepEqual(modelFixture.columns, metadata.feature_cols);
     assert.throws(() => validateMetadata({ ...metadata, feature_cols: metadata.feature_cols.toReversed() }), /feature order/);
-    assert.throws(() => validateProfile({ ...profile, sample_rate: 2000 }), /profile/);
+    assert.throws(() => validateProfile({ ...profile, sample_rate: 125 }), /profile/);
 });
 
 test('feature order and invalid values are enforced; no zero-filled missing features', () => {
