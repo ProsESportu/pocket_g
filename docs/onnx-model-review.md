@@ -1,6 +1,6 @@
 # ONNX model fit review
 
-Reviewed 4 October 2026. Scope: the two bundled models, their TypeScript preprocessing and browser inference paths, and published replacement candidates. This is an engineering fit assessment; no candidate was benchmarked on Pocket G recordings.
+Reviewed 4 October 2026. Scope: the two bundled models, their TypeScript preprocessing and browser inference paths, and published replacement candidates. This is an engineering fit assessment; no candidate was benchmarked on MyGymBro recordings.
 
 ## Current configuration: raw acquisition at 2,000 Hz
 
@@ -89,7 +89,7 @@ Local evidence: `static/models/ecgfounder/validation_report.json`, `static/model
 
 ### EMG findings before migration
 
-The original project describes 2,000 Hz biceps recordings and a 20–450 Hz bandpass. Pocket G instead uses 125 Hz and a separate 20–55 Hz profile with unchanged classifier weights. Its Nyquist frequency is 62.5 Hz; interpolation cannot recover the original spectrum. [Upstream method](https://github.com/muqsitamir/EMG_fatigue_detection)
+The original project describes 2,000 Hz biceps recordings and a 20–450 Hz bandpass. MyGymBro instead uses 125 Hz and a separate 20–55 Hz profile with unchanged classifier weights. Its Nyquist frequency is 62.5 Hz; interpolation cannot recover the original spectrum. [Upstream method](https://github.com/muqsitamir/EMG_fatigue_detection)
 
 The 24 inputs include raw amplitudes, median frequency, repetition number, sample indices and repetition duration in samples. At 125 Hz a two-second repetition has about 250 samples, versus 4,000 at 2,000 Hz. The changed physical meaning of those inputs is not corrected by retaining their order. Timing/repetition features also create a shortcut-learning risk that needs ablation testing; this review did not inspect fitted coefficient importance.
 
@@ -108,7 +108,7 @@ Local evidence: `static/models/emg-fatigue/metadata.json`, `experimental-125hz.j
 | CLEF-Small | Single-lead representation encoder; 448K parameters; quickstart uses 5,000 samples and returns 256 features | PyTorch checkpoint | Research/training option: add a task head, verify preprocessing and export. Not a ready diagnostic classifier. |
 | MIT-BIH legacy ResNet-1D + RR | MLII, 360 Hz; 180-sample beat windows plus two RR features; normal/PVC/PAC | ONNX export, about 2.2 MB | Lower-priority beat-classification baseline. Lead mismatch and weak PAC results make it a poor default here. |
 
-HeartKIT's published configurations need 2,000→100 Hz downsampling from the updated capture stream with an appropriate anti-alias filter; reproduce each model's own normalization instead of copying ECGFounder's preprocessing. Download size after ONNX conversion is unknown. Its published F1 values are not Pocket G measurements. [Segmentation model](https://ambiqai.github.io/heartkit/zoo/seg-2-tcn-sm/), [binary rhythm model](https://ambiqai.github.io/heartkit/zoo/arr-2-eff-sm/), [four-class model](https://ambiqai.github.io/heartkit/zoo/arr-4-eff-sm/)
+HeartKIT's published configurations need 2,000→100 Hz downsampling from the updated capture stream with an appropriate anti-alias filter; reproduce each model's own normalization instead of copying ECGFounder's preprocessing. Download size after ONNX conversion is unknown. Its published F1 values are not MyGymBro measurements. [Segmentation model](https://ambiqai.github.io/heartkit/zoo/seg-2-tcn-sm/), [binary rhythm model](https://ambiqai.github.io/heartkit/zoo/arr-2-eff-sm/), [four-class model](https://ambiqai.github.io/heartkit/zoo/arr-4-eff-sm/)
 
 OpenECG's model card specifies `signal [B,5000]` with rank normalization and three per-sample logit outputs. It evaluates rhythm across cohorts, but notes weak/unverified classes and lead-II limitations. Exclude the outer two seconds when following its streaming evaluation convention. The README also describes a separate 250 Hz TFLite delineator; that is not the 500 Hz ONNX codec. [Codec model card](https://github.com/vitaldb/openecg/blob/main/openecg/models/codec_v6_MODEL_CARD.md), [pipeline documentation](https://github.com/vitaldb/openecg)
 

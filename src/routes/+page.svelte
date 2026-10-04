@@ -107,13 +107,13 @@
 </script>
 
 <svelte:head>
-	<title>Pocket G</title>
+	<title>MyGymBro</title>
 	<meta name="description" content="Live ECG, EMG, pulse and rep tracking while you train." />
 </svelte:head>
 
 <header class="border-b border-rule">
 	<div class="mx-auto flex h-16 max-w-[1280px] items-center justify-between gap-3 px-4 md:px-8">
-		<a href="/" class="display inline-flex min-h-11 items-center text-[20px]">Pocket&nbsp;<span class="text-lime">G</span></a>
+		<a href="/" class="display inline-flex min-h-11 items-center text-[20px]">MyGym<span class="text-lime">Bro</span></a>
 		<div class="flex items-center gap-2 md:gap-3">
 			<p class="label mr-1 flex items-center gap-2 text-muted">
 				<svg class={['size-2.5 shrink-0', beat && 'beat']} style:--beat={beat} viewBox="0 0 10 10" aria-hidden="true">
@@ -149,7 +149,7 @@
 			<span aria-hidden="true" class="drift -mt-[0.08em] block" style:--drift="-0.3em" style:--fade={0.5}><span class="rise outline-text block" style:--i={2}>Session</span></span>
 			<span class="rise -mt-[0.08em] block text-lime" style:--i={3.5}>Session</span>
 		</h1>
-		<p class="mt-6 max-w-[52ch] text-[16px] leading-relaxed text-muted">Pocket G reads your heart, muscle and arm movement while you lift. Put on the sensor board and the forearm motion sensor, then start curling. Everything below updates live.</p>
+		<p class="mt-6 max-w-[52ch] text-[16px] leading-relaxed text-muted">MyGymBro reads your heart, muscle and arm movement while you lift. Put on the sensor board and the forearm motion sensor, then start curling. Everything below updates live.</p>
 	</div>
 	<div class="hero-panel relative bg-panel lg:col-span-2 lg:col-start-3">
 		<svg class="edge-line absolute inset-0 hidden h-full w-full lg:block" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><line x1="16" y1="0" x2="0" y2="100" stroke="var(--color-lime)" stroke-width="2" vector-effect="non-scaling-stroke" /></svg>
@@ -215,7 +215,7 @@
 	</div>
 
 	<footer class="label mt-20 flex flex-wrap justify-between gap-x-6 gap-y-2 border-t border-rule pt-6 text-muted">
-		<p class="flex items-center gap-3"><span class="whitespace-nowrap text-white">Pocket G</span><span aria-hidden="true" class="h-4 w-0.5 bg-lime"></span>All times in Warsaw time</p>
+		<p class="flex items-center gap-3"><span class="whitespace-nowrap text-white">MyGymBro</span><span aria-hidden="true" class="h-4 w-0.5 bg-lime"></span>All times in Warsaw time</p>
 		<p class="tabular-nums">{displayed.loadedAt ? `Last fetched ${date(displayed.loadedAt)}` : 'Waiting for the first connection'}</p>
 	</footer>
 </main>

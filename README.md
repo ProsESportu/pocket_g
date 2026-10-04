@@ -1,4 +1,4 @@
-# Pocket G — Supabase sample
+# MyGymBro — Supabase sample
 
 A small SvelteKit 3 + TypeScript viewer for `public.ekgemgpuls` in the
 `hackyeah2026` Supabase project.
